@@ -1,0 +1,197 @@
+.App {
+  text-align: center;
+  min-height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.App-header {
+  background-color: #282c34;
+  padding: 20px;
+  color: white;
+  margin-bottom: 20px;
+}
+
+.App-header h1 {
+  margin: 0 0 10px 0;
+  font-size: 2.5rem;
+  color: #f7931a;
+}
+
+.App-header p {
+  margin: 0;
+  font-size: 1.2rem;
+  opacity: 0.8;
+}
+
+main {
+  padding: 0 20px 40px 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Chart Container Styles */
+.chart-container {
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 30px;
+  margin-bottom: 20px;
+}
+
+.chart-header {
+  margin-bottom: 30px;
+}
+
+.chart-header h2 {
+  margin: 0 0 20px 0;
+  color: #333;
+  font-size: 1.8rem;
+}
+
+/* Current Stats Styles */
+.current-stats {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+  flex-wrap: wrap;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin: 20px 0;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+
+.stat-label {
+  font-size: 0.9rem;
+  color: #666;
+  font-weight: 500;
+}
+
+.stat-value {
+  font-size: 1.3rem;
+  font-weight: bold;
+  color: #333;
+}
+
+.stat-value.above-fair {
+  color: #dc3545;
+}
+
+.stat-value.below-fair {
+  color: #28a745;
+}
+
+/* Chart Wrapper */
+.chart-wrapper {
+  margin-top: 20px;
+}
+
+/* Loading and Error States */
+.loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  font-size: 1.2rem;
+  color: #666;
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 300px;
+  color: #dc3545;
+  gap: 20px;
+}
+
+.error button {
+  background-color: #f7931a;
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.error button:hover {
+  background-color: #e8850b;
+}
+
+/* Tooltip Styles */
+.chart-tooltip {
+  background: white;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.tooltip-label {
+  font-weight: bold;
+  margin-bottom: 8px;
+  color: #333;
+}
+
+.tooltip-ratio {
+  margin-top: 8px;
+  font-weight: bold;
+  color: #666;
+  border-top: 1px solid #eee;
+  padding-top: 8px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .App-header h1 {
+    font-size: 2rem;
+  }
+  
+  .App-header p {
+    font-size: 1rem;
+  }
+  
+  .current-stats {
+    gap: 20px;
+  }
+  
+  .chart-container {
+    padding: 20px;
+    margin: 0 10px 20px 10px;
+  }
+  
+  main {
+    padding: 0 10px 40px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .current-stats {
+    flex-direction: column;
+    gap: 15px;
+  }
+  
+  .stat {
+    flex-direction: row;
+    justify-content: space-between;
+    width: 100%;
+  }
+}
+
+/* Future Projection Tooltip */
+.tooltip-future {
+  font-style: italic;
+  color: #888;
+  font-size: 0.9rem;
+  margin-top: 5px;
+  border-top: 1px solid #eee;
+  padding-top: 5px;
+} 

@@ -1,0 +1,85 @@
+# Cursor Rules for Bitcoin Retirement Calculator
+
+## Project Structure
+```
+BitcoinRetire/
+├── .cursorrules
+├── .gitignore
+├── package.json
+├── package-lock.json
+├── tsconfig.json
+├── README.md
+├── public/
+│   ├── index.html
+│   └── bitcoin-historical-data.csv  (SINGLE source - 2012 to present)
+├── src/
+│   ├── index.tsx
+│   ├── index.css
+│   ├── App.tsx
+│   ├── App.css
+│   ├── components/
+│   │   └── BitcoinChart.tsx
+│   ├── services/
+│   │   └── BitcoinAPI.ts
+│   ├── models/
+│   │   └── PowerLaw.ts
+│   └── types/
+│       └── Bitcoin.ts
+└── node_modules/
+```
+
+## File Organization & Duplication Prevention
+- NEVER create duplicate data files
+- NEVER copy the same file to multiple locations
+- ALWAYS use single source of truth for data
+- DELETE any duplicate files immediately when found
+- Use imports/references instead of copying data
+
+## Data Management
+- Keep ONE master CSV file: `bitcoin-historical-data.csv` in `/public` folder (DAILY data from 2012-2025)
+- This CSV is derived from 1-minute historical data and contains thousands of daily price points
+- NO additional data files like `bitcoin-daily-data.csv` or `bitcoinData.csv`
+- Use fetch() to load data from public folder
+- NO hardcoded data arrays in components
+- APIs are ONLY for supplementing recent data (last few days/weeks), NOT for historical data
+- Historical CSV is the foundation, APIs are supplements only
+
+## API Usage
+- HISTORICAL DATA: Use comprehensive CSV file (2012-2025 daily data)
+- RECENT DATA: APIs supplement CSV for last few days/weeks only
+- Never replace historical CSV data with API data
+- APIs have limited historical range (365 days max typically)
+- Always handle CORS issues properly
+- Use fallbacks, never duplicate data sources
+- Cache API responses in memory, not files
+
+## Code Structure
+- One component per file
+- No duplicate components with similar names
+- Use TypeScript interfaces in `/src/types`
+- Keep models in `/src/models`
+- Keep services in `/src/services`
+
+## File Naming
+- Use PascalCase for components: `BitcoinChart.tsx`
+- Use camelCase for utilities: `powerLaw.ts`
+- Use kebab-case for data files: `bitcoin-historical-data.csv`
+- NO files with similar names
+
+## Dependencies
+- Install packages only once
+- Check package.json before adding dependencies
+- Remove unused dependencies immediately
+- NO duplicate or similar packages
+
+## Git Hygiene
+- Commit frequently with clear messages
+- NO committing duplicate files
+- Use .gitignore for build artifacts
+- Clean working directory before major changes
+
+## Error Prevention
+- Always check if file exists before creating
+- Use proper TypeScript types
+- Handle all async operations with proper error handling
+- Test API endpoints before implementing 
