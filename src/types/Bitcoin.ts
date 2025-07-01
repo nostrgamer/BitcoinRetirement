@@ -25,6 +25,22 @@ export interface RetirementInputs {
   annualWithdrawal: number;
 }
 
+export interface MonthlySavingsInputs {
+  monthlySavingsAmount: number;
+  yearsToRetirement: number;
+  enabled: boolean;
+}
+
+export interface SavingsProjection {
+  year: number;
+  month: number;
+  monthlySavingsAmount: number;
+  bitcoinFairValue: number;
+  bitcoinPurchased: number;
+  totalBitcoinAccumulated: number;
+  totalCashInvested: number;
+}
+
 export interface PowerLawMetrics {
   fairValueRatio: number;
   floorRatio: number;
