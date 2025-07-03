@@ -25,12 +25,12 @@ const BitcoinChart: React.FC = () => {
   
   // Retirement functionality state
   const [retirementInputs, setRetirementInputs] = useState<RetirementInputs>({
-    bitcoinAmount: 1.0,
+    bitcoinAmount: 0.1,
     cashAmount: 10000,
     annualWithdrawal: 60000
   });
   const [monthlySavingsInputs, setMonthlySavingsInputs] = useState<MonthlySavingsInputs>({
-    monthlySavingsAmount: 1000,
+    monthlySavingsAmount: 500,
     yearsToRetirement: 10,
     enabled: false,
     doubleDownInBearMarkets: false
@@ -49,8 +49,6 @@ const BitcoinChart: React.FC = () => {
     
     return () => clearInterval(refreshInterval);
   }, []);
-
-
 
   const loadChartData = async () => {
     try {
@@ -119,7 +117,7 @@ const BitcoinChart: React.FC = () => {
         };
       });
 
-      // Add future power law projections (8 years ahead)
+      // Add future power law projections (10 years ahead)
       if (historicalPrices.length > 0) {
         const lastDataDate = new Date(historicalPrices[historicalPrices.length - 1].timestamp);
         const futureProjections: ChartDataPoint[] = [];
@@ -127,7 +125,7 @@ const BitcoinChart: React.FC = () => {
         console.log(`Adding 8 years of future power law projections starting from ${lastDataDate.toISOString().split('T')[0]}`);
         
         // Generate daily data points for the next 8 years to match historical spacing
-        const daysPer8Years = 8 * 365; // ~2920 days
+        const daysPer8Years = 10 * 365; // ~3650 days
         for (let dayOffset = 1; dayOffset <= daysPer8Years; dayOffset += 30) { // Every 30 days for performance
           const futureDate = new Date(lastDataDate);
           futureDate.setDate(futureDate.getDate() + dayOffset);
@@ -162,8 +160,6 @@ const BitcoinChart: React.FC = () => {
       setLoading(false);
     }
   };
-
-
 
   const calculateMonthlySavingsProjection = () => {
     if (!monthlySavingsInputs.enabled || monthlySavingsInputs.monthlySavingsAmount <= 0 || monthlySavingsInputs.yearsToRetirement <= 0) {
@@ -203,7 +199,7 @@ const BitcoinChart: React.FC = () => {
           
           // Debug logging for bear market doubling
           if (month === 0) { // Only log once per year
-            console.log(`🐻 MONTHLY SAVINGS DEBUG - Year ${year + 1} (${new Date().getFullYear() + year}):
+            console.log(`MONTHLY SAVINGS DEBUG - Year ${year + 1} (${new Date().getFullYear() + year}):
               Cycle Year: ${cycleYear}
               Is Bear Market: ${isBearMarketYear}
               Base Monthly Amount: $${Math.round(currentMonthlySavings)}
@@ -268,60 +264,25 @@ const BitcoinChart: React.FC = () => {
       Bitcoin Value at Retirement: $${bitcoinValue.toLocaleString()}
       Total Assets: $${totalAssets.toLocaleString()}`);
     
-    // Calculate SWR based on market conditions only (not portfolio size)
-    const marketConditions = calculateMarketBasedSWR(bitcoinPriceAtRetirement, evaluationYear);
+    // Test if withdrawal amount passes Bear Market Test at retirement date
+    const bearMarketTestResult = testBearMarketSurvival(bitcoinPriceAtRetirement, evaluationYear, totalBitcoinHoldings, retirementInputs.annualWithdrawal, retirementInputs.cashAmount);
     
-    // Bitcoin has crash risk and needs SWR based on Power Law position
-    const BITCOIN_SWR = marketConditions.bitcoinRate; // Based on Power Law position only
-    
-    // Cash doesn't have "SWR" - it has inflation decay (~6%/year) but no overnight crash risk
-    // For retirement planning, we can use cash as needed since it's stable
-    // The "safe withdrawal" concept only applies to the Bitcoin portion
-    
-    // Calculate sustainable annual withdrawal
-    // Only Bitcoin provides sustainable annual income (based on Power Law growth)
-    // Cash is a one-time buffer, not sustainable annual income
-    const bitcoinSafeWithdrawal = bitcoinValue * BITCOIN_SWR;
-    const sustainableAnnualWithdrawal = bitcoinSafeWithdrawal; // Only Bitcoin is sustainable annually
-    const effectiveSWR = sustainableAnnualWithdrawal / totalAssets;
-    
-        // Debug logging for withdrawal calculation
-    console.log(`🔢 Sustainable Annual Withdrawal Calculation:
-      Base Bitcoin Holdings: ${retirementInputs.bitcoinAmount.toFixed(4)} BTC
-      Projected Bitcoin from Savings: ${projectedBitcoin.toFixed(4)} BTC
+    console.log(`Retirement Analysis:
       Total Bitcoin Holdings: ${totalBitcoinHoldings.toFixed(4)} BTC
       Bitcoin Value: $${bitcoinValue.toLocaleString()}
       Cash Holdings: $${retirementInputs.cashAmount.toLocaleString()}
       Total Assets: $${totalAssets.toLocaleString()}
-      
-      Bitcoin SWR: ${(BITCOIN_SWR * 100).toFixed(1)}%
-      Bitcoin Sustainable Annual Withdrawal: $${bitcoinSafeWithdrawal.toLocaleString()}
-      Cash: $${retirementInputs.cashAmount.toLocaleString()} (ONE-TIME buffer, not annual income)
-      
-      Total Sustainable Annual Withdrawal: $${sustainableAnnualWithdrawal.toLocaleString()}
-      Effective SWR: ${(effectiveSWR * 100).toFixed(1)}%
-      
-      IMPORTANT: Cash is NOT sustainable annual income - it depletes if used!`);
-     
-         // Test if withdrawal amount passes Bear Market Test at retirement date
-    // Using the original withdrawal amount (not inflation-adjusted)
-    const bearMarketTestResult = testBearMarketSurvival(bitcoinPriceAtRetirement, evaluationYear, totalBitcoinHoldings, retirementInputs.annualWithdrawal, retirementInputs.cashAmount);
-    
-    // Check if we can retire: Either sustainable withdrawal covers needs, OR Bear Market Test passes with cash strategy
-    const canRetireWithSustainableIncome = sustainableAnnualWithdrawal >= retirementInputs.annualWithdrawal;
-    const canRetireWithBearMarketStrategy = bearMarketTestResult.passes;
-    
-    // Smart retirement strategy simulation
-    const retirementSimulation = simulateSmartRetirement();
+      Annual Withdrawal Need: $${retirementInputs.annualWithdrawal.toLocaleString()}
+      Bear Market Test: ${bearMarketTestResult.passes ? 'PASSED' : 'FAILED'}`);
     
     setRetirementStatus({
-      canRetire: canRetireWithSustainableIncome || canRetireWithBearMarketStrategy,
+      canRetire: bearMarketTestResult.passes,
       totalAssets,
-      safeWithdrawalRate: effectiveSWR,
-      retirementDate: retirementSimulation.retirementDate,
-      retirementDataPoint: retirementSimulation.retirementDataPoint,
-      riskLevel: marketConditions.riskLevel,
-      powerLawMetrics: marketConditions.powerLawMetrics
+      safeWithdrawalRate: 0, // Simplified - no longer using SWR concept
+      retirementDate: undefined,
+      retirementDataPoint: undefined,
+      riskLevel: 'Bear Market Test Based',
+      powerLawMetrics: undefined
     });
   };
 
@@ -385,241 +346,6 @@ const BitcoinChart: React.FC = () => {
     console.log('No historical retirement date found - Bear Market Test failed for all historical prices');
   };
 
-  const calculateBearMarketSWR = (bitcoinPrice: number, year: number, bitcoinHoldings: number, annualWithdrawal: number, cashHoldings: number = 0) => {
-    // Note: This function is deprecated - new logic treats cash as buffer, not SWR-based asset
-    // Kept for compatibility with existing retirement simulation code
-    
-    // Calculate Power Law bands for the given date
-    const targetDate = new Date(year, 0, 1);
-    const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
-    const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
-    const ceilingValue = BitcoinPowerLaw.calculateUpperBound(targetDate);
-    
-    // Determine position in Power Law bands
-    const fairValueRatio = bitcoinPrice / fairValue;
-    const floorRatio = bitcoinPrice / floorValue;
-    const ceilingRatio = bitcoinPrice / ceilingValue;
-    
-    // Determine risk level for display
-    let riskLevel: string;
-    if (ceilingRatio >= 1.0) {
-      riskLevel = "🔴 EXTREME RISK - Above Power Law Ceiling";
-    } else if (fairValueRatio >= 1.8) {
-      riskLevel = "🟠 VERY HIGH RISK - Approaching Ceiling";
-    } else if (fairValueRatio >= 1.4) {
-      riskLevel = "🟡 HIGH RISK - Overextended";
-    } else if (fairValueRatio >= 1.1) {
-      riskLevel = "🟢 MODERATE RISK - Fair Value Zone";
-    } else if (fairValueRatio >= 0.8) {
-      riskLevel = "🔵 LOW RISK - Undervalued";
-    } else if (floorRatio >= 1.2) {
-      riskLevel = "🟣 VERY LOW RISK - Deep Value";
-    } else {
-      riskLevel = "🚀 MINIMAL RISK - At Power Law Floor";
-    }
-    
-    // Realistic Bear Market Test with Cash Strategy: Can we survive using both Bitcoin and cash strategically?
-    // Scenario: 60% crash for 1 year, then gradual recovery to fair value over 2 years
-    // Strategy: Use cash during bear market to preserve Bitcoin, only sell Bitcoin when necessary
-    
-    const bearMarketSurvivalTest = (): boolean => {
-      if (bitcoinHoldings <= 0 || annualWithdrawal <= 0) return false;
-      
-      let remainingBitcoin = bitcoinHoldings;
-              // Use the actual cash holdings passed to the function
-        let remainingCash = Math.max(0, cashHoldings);
-      
-      // Year 1: Evolving crash severity - less severe as Bitcoin matures
-      const floorRatio = calculateEvolvingFloorRatio(year);
-      const crashPrice = fairValue * floorRatio; // Use evolving floor instead of static 60% drop
-      
-      // Smart strategy: Use cash first during the crash
-      if (remainingCash >= annualWithdrawal) {
-        // Can cover entirely with cash - no Bitcoin sales needed!
-        remainingCash -= annualWithdrawal;
-      } else {
-        // Use all remaining cash, then sell Bitcoin for the rest
-        const cashUsed = remainingCash;
-        const bitcoinNeeded = annualWithdrawal - cashUsed;
-        remainingCash = 0;
-        
-        const year1BitcoinSold = bitcoinNeeded / crashPrice;
-        remainingBitcoin -= year1BitcoinSold;
-        
-        if (remainingBitcoin <= 0) {
-          return false; // Ran out of Bitcoin
-        }
-      }
-      
-      // Year 2: Gradual recovery - continue strategic cash/Bitcoin usage
-      const year2Date = new Date(year + 1, 0, 1);
-      const year2FairValue = BitcoinPowerLaw.calculateFairValue(year2Date);
-      const year2Price = year2FairValue * 0.7; // Still below fair value but recovering
-      
-      // Smart strategy: Still prefer cash if available, but Bitcoin prices are better
-      if (remainingCash >= annualWithdrawal) {
-        // Can still cover with cash
-        remainingCash -= annualWithdrawal;
-      } else {
-        // Use remaining cash + Bitcoin
-        const cashUsed = remainingCash;
-        const bitcoinNeeded = annualWithdrawal - cashUsed;
-        remainingCash = 0;
-        
-        const year2BitcoinSold = bitcoinNeeded / year2Price;
-        remainingBitcoin -= year2BitcoinSold;
-        
-        if (remainingBitcoin <= 0) {
-          return false; // Ran out of Bitcoin
-        }
-      }
-      
-      // Year 3: Full recovery to fair value - check long-term sustainability
-      const year3Date = new Date(year + 2, 0, 1);
-      const year3FairValue = BitcoinPowerLaw.calculateFairValue(year3Date);
-      const year3BitcoinValue = remainingBitcoin * year3FairValue;
-      const year3TotalPortfolio = year3BitcoinValue + remainingCash;
-      
-      // Check if we can sustain ongoing withdrawals
-      const year4Date = new Date(year + 3, 0, 1);
-      const year4FairValue = BitcoinPowerLaw.calculateFairValue(year4Date);
-      const rawPowerLawGrowthRate = (year4FairValue - year3FairValue) / year3FairValue;
-      
-      // Use raw Power Law growth rate as designed (no artificial floors)
-      const powerLawGrowthRate = rawPowerLawGrowthRate;
-      
-      // Use 70% of Power Law growth rate as sustainable withdrawal rate on Bitcoin portion
-      const sustainableWithdrawalRate = powerLawGrowthRate * 0.7;
-      const sustainableBitcoinWithdrawal = year3BitcoinValue * sustainableWithdrawalRate;
-      
-      // Add cash withdrawal capacity (can withdraw up to 10% of remaining cash annually)
-      const sustainableCashWithdrawal = remainingCash * 0.10;
-      const totalSustainableWithdrawal = sustainableBitcoinWithdrawal + sustainableCashWithdrawal;
-      
-      return totalSustainableWithdrawal >= annualWithdrawal;
-    };
-    
-    // Test if we can survive the bear market scenario with current withdrawal needs
-    const canSurviveBearMarket = bearMarketSurvivalTest();
-    
-    // Calculate current portfolio value and implied SWR
-    const currentPortfolioValue = bitcoinHoldings * bitcoinPrice;
-    const impliedSWR = currentPortfolioValue > 0 ? annualWithdrawal / currentPortfolioValue : 0;
-    
-    // If we can survive the bear market test, use the implied SWR, otherwise use conservative rate
-    let optimalSWR: number;
-    if (canSurviveBearMarket) {
-      // Can survive bear market test - use implied SWR but cap it reasonably
-      optimalSWR = Math.min(impliedSWR, 0.15); // Cap at 15%
-    } else {
-      // Can't survive bear market test - use conservative 4% rate
-      // If the full bear market test fails, we should be very conservative
-      optimalSWR = 0.04; // Use traditional 4% rate as fallback
-    }
-    
-    // Cap at reasonable maximum (15%) even if math allows higher
-    const cappedSWR = Math.min(optimalSWR, 0.15);
-    
-    console.log(`Bear Market SWR Analysis for ${year}:
-      Bitcoin Price: $${bitcoinPrice.toLocaleString()}
-      Fair Value: $${fairValue.toLocaleString()} (${fairValueRatio.toFixed(2)}x)
-      Floor Value: $${floorValue.toLocaleString()} (${floorRatio.toFixed(2)}x)
-      Ceiling Value: $${ceilingValue.toLocaleString()} (${ceilingRatio.toFixed(2)}x)
-      Bitcoin Holdings: ${bitcoinHoldings.toFixed(4)} BTC
-      Annual Withdrawal: $${annualWithdrawal.toLocaleString()}
-      Current Portfolio Value: $${currentPortfolioValue.toLocaleString()}
-      Implied SWR: ${(impliedSWR * 100).toFixed(1)}%
-      Can Survive Bear Market Test: ${canSurviveBearMarket}
-      Final SWR: ${(cappedSWR * 100).toFixed(1)}%
-      ${riskLevel}
-      Test: Survives 60% crash + 2-year recovery + Power Law growth`);
-    
-    return {
-      cashRate: 0.10, // Deprecated: kept for compatibility
-      bitcoinRate: cappedSWR,
-      floorSurvivalRate: optimalSWR,
-      riskLevel: riskLevel,
-      powerLawMetrics: {
-        fairValueRatio,
-        floorRatio,
-        ceilingRatio,
-        fairValue,
-        floorValue,
-        ceilingValue
-      }
-    };
-  };
-
-  const calculateMarketBasedSWR = (bitcoinPrice: number, year: number) => {
-    // Calculate Power Law bands for the given date
-    const targetDate = new Date(year, 0, 1);
-    const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
-    const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
-    const ceilingValue = BitcoinPowerLaw.calculateUpperBound(targetDate);
-    
-    // Determine position in Power Law bands
-    const fairValueRatio = bitcoinPrice / fairValue;
-    const floorRatio = bitcoinPrice / floorValue;
-    const ceilingRatio = bitcoinPrice / ceilingValue;
-    
-    // Determine risk level for display
-    let riskLevel: string;
-    if (ceilingRatio >= 1.0) {
-      riskLevel = "🔴 EXTREME RISK - Above Power Law Ceiling";
-    } else if (fairValueRatio >= 1.8) {
-      riskLevel = "🟠 VERY HIGH RISK - Approaching Ceiling";
-    } else if (fairValueRatio >= 1.4) {
-      riskLevel = "🟡 HIGH RISK - Overextended";
-    } else if (fairValueRatio >= 1.1) {
-      riskLevel = "🟢 MODERATE RISK - Fair Value Zone";
-    } else if (fairValueRatio >= 0.8) {
-      riskLevel = "🔵 LOW RISK - Undervalued";
-    } else if (floorRatio >= 1.2) {
-      riskLevel = "🟣 VERY LOW RISK - Deep Value";
-    } else {
-      riskLevel = "🚀 MINIMAL RISK - At Power Law Floor";
-    }
-    
-    // Calculate Power Law-based Bitcoin SWR (based on market conditions only)
-    // Calculate annual growth rate by comparing this year's fair value to next year's
-    const nextYearDate = new Date(year + 1, 0, 1);
-    const currentFairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
-    const nextYearFairValue = BitcoinPowerLaw.calculateFairValue(nextYearDate);
-    const rawPowerLawGrowthRate = (nextYearFairValue - currentFairValue) / currentFairValue;
-    
-    // Use raw Power Law growth rate as designed (no artificial floors)
-    const powerLawGrowthRate = rawPowerLawGrowthRate;
-    
-    // Apply 70% safety factor and cap at 15% maximum
-    const uncappedBitcoinSWR = powerLawGrowthRate * 0.7;
-    const bitcoinSWR = Math.min(uncappedBitcoinSWR, 0.15); // Cap at 15% maximum
-    
-    // Debug logging
-    console.log(`📊 SWR Calculation Debug for ${year}:
-      Bitcoin Price: $${bitcoinPrice.toLocaleString()}
-      Current Fair Value: $${currentFairValue.toLocaleString()}
-      Next Year Fair Value: $${nextYearFairValue.toLocaleString()}
-      Raw Power Law Growth Rate: ${(rawPowerLawGrowthRate * 100).toFixed(1)}%
-      Power Law Growth Rate: ${(powerLawGrowthRate * 100).toFixed(1)}%
-      70% Safety Factor: ${(uncappedBitcoinSWR * 100).toFixed(1)}%
-      Final Bitcoin SWR: ${(bitcoinSWR * 100).toFixed(1)}%
-      Fair Value Ratio: ${fairValueRatio.toFixed(2)}x
-      Risk Level: ${riskLevel}`)
-    
-    return {
-      bitcoinRate: bitcoinSWR,
-      riskLevel,
-      powerLawMetrics: {
-        fairValue,
-        floorValue,
-        ceilingValue,
-        fairValueRatio,
-        floorRatio,
-        ceilingRatio
-      }
-    };
-  };
-
   const testBearMarketSurvival = (bitcoinPrice: number, year: number, bitcoinHoldings: number, annualWithdrawal: number, cashHoldings: number = 0) => {
     if (bitcoinHoldings <= 0 || annualWithdrawal <= 0) return { passes: false };
     
@@ -632,9 +358,9 @@ const BitcoinChart: React.FC = () => {
     const targetDate = new Date(year, 0, 1);
     const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
     
-    // Year 1: Evolving crash severity - less severe as Bitcoin matures
-    const floorRatio = calculateEvolvingFloorRatio(year);
-    const crashPrice = fairValue * floorRatio; // Use evolving floor instead of static 60% drop
+    // Year 1: Use standard Power Law floor for crash scenario
+    const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
+    const crashPrice = floorValue; // Use standard Power Law floor
     
     // Smart strategy: Use cash first during the crash
     if (remainingCash >= annualWithdrawal) {
@@ -650,8 +376,8 @@ const BitcoinChart: React.FC = () => {
       if (remainingBitcoin < 0) return { passes: false }; // Ran out of Bitcoin in year 1
     }
     
-    // Year 2: Recovery year - gradual recovery using evolving floor
-    const recoveryPrice = (fairValue * floorRatio + fairValue) / 2; // Halfway between floor and fair value
+    // Year 2: Recovery year - gradual recovery using standard Power Law floor
+    const recoveryPrice = (floorValue + fairValue) / 2; // Halfway between floor and fair value
     if (remainingCash >= annualWithdrawal) {
       remainingCash -= annualWithdrawal;
     } else {
@@ -663,176 +389,21 @@ const BitcoinChart: React.FC = () => {
       if (remainingBitcoin < 0) return { passes: false }; // Ran out of Bitcoin in year 2
     }
     
-    // Year 3: Back to fair value - check long-term sustainability
+    // Year 3: Back to fair value - check if remaining portfolio can last at least 20 more years
     const sustainablePrice = fairValue;
-    // Calculate Power Law growth rate for sustainability check
-    const nextYearDate = new Date(year + 1, 0, 1);
-    const currentFairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
-    const nextYearFairValue = BitcoinPowerLaw.calculateFairValue(nextYearDate);
-    const rawPowerLawGrowthRate = (nextYearFairValue - currentFairValue) / currentFairValue;
-    
-          // Use raw Power Law growth rate as designed (no artificial floors)
-      const powerLawGrowthRate = rawPowerLawGrowthRate;
-    const conservativeSWR = powerLawGrowthRate * 0.7; // 70% of growth rate for safety
-    
     const remainingBitcoinValue = remainingBitcoin * sustainablePrice;
-    // Cash is available as buffer - for sustainability check, assume it can cover some ongoing needs
-    // but primarily Bitcoin should provide the sustainable income
-    const sustainableAnnualWithdrawal = remainingBitcoinValue * conservativeSWR + remainingCash * 0.05; // Very conservative 5% on remaining cash
+    const totalRemainingValue = remainingBitcoinValue + remainingCash;
+    
+    // Simple sustainability check: Can the remaining portfolio last at least 20 years?
+    // This is much simpler than complex SWR calculations
+    const yearsOfRunway = totalRemainingValue / annualWithdrawal;
+    const minimumYearsRequired = 20; // Must survive bear market PLUS have 20 years runway
     
     return {
-      passes: sustainableAnnualWithdrawal >= annualWithdrawal,
+      passes: yearsOfRunway >= minimumYearsRequired,
       remainingBitcoin,
       remainingCash
     };
-  };
-
-  const simulateSmartRetirement = () => {
-    if (retirementInputs.bitcoinAmount <= 0 || chartData.length === 0) {
-      return { canRetire: false };
-    }
-
-    const monthlyWithdrawal = retirementInputs.annualWithdrawal / 12;
-    
-    // Start simulation from today
-    const today = new Date();
-    const currentDataPoint = chartData.find(point => 
-      point.actualPrice !== null && 
-      Math.abs(new Date(point.date).getTime() - today.getTime()) < 30 * 24 * 60 * 60 * 1000 // Within 30 days
-    ) || chartData[chartData.length - 1];
-    
-    if (!currentDataPoint) return { canRetire: false };
-    
-    // Current portfolio state
-    let remainingCash = retirementInputs.cashAmount;
-    let remainingBitcoin = retirementInputs.bitcoinAmount;
-    let currentBitcoinPrice = currentPrice || currentDataPoint.powerLawPrice;
-    
-    // Check if we can retire today using Bear Market Test
-    const currentYear = today.getFullYear();
-    const currentRates = calculateBearMarketSWR(currentBitcoinPrice, currentYear, remainingBitcoin, retirementInputs.annualWithdrawal, remainingCash);
-    
-    // Calculate weighted safe withdrawal rate based on asset allocation
-    const bitcoinValue = remainingBitcoin * currentBitcoinPrice;
-    const totalCurrentValue = remainingCash + bitcoinValue;
-    const bitcoinWeight = bitcoinValue / totalCurrentValue;
-    const cashWeight = remainingCash / totalCurrentValue;
-    
-    const blendedWithdrawalRate = (bitcoinWeight * currentRates.bitcoinRate) + (cashWeight * currentRates.cashRate);
-    const safeAnnualWithdrawal = totalCurrentValue * blendedWithdrawalRate;
-    
-    if (safeAnnualWithdrawal >= retirementInputs.annualWithdrawal) {
-      return { canRetire: true };
-    }
-
-    // Simulate future months to find retirement date
-    const futureData = chartData.filter(point => new Date(point.date) > today).sort((a, b) => a.timestamp - b.timestamp);
-    
-    for (let i = 0; i < futureData.length; i++) {
-      const dataPoint = futureData[i];
-      const bitcoinPrice = dataPoint.powerLawPrice;
-      const currentSimulationYear = new Date(dataPoint.date).getFullYear();
-      
-      // Calculate months between data points (approximately)
-      const monthsElapsed = i === 0 ? 1 : 
-        Math.max(1, Math.round((dataPoint.timestamp - futureData[i-1].timestamp) / (30 * 24 * 60 * 60 * 1000)));
-      
-      // Smart spending strategy for each month in this period
-      for (let month = 0; month < monthsElapsed && (remainingCash > 0 || remainingBitcoin > 0); month++) {
-        const portfolioValue = remainingCash + (remainingBitcoin * bitcoinPrice);
-        
-        // Calculate dynamic withdrawal rates for this year using Bear Market Test
-        const yearRates = calculateBearMarketSWR(bitcoinPrice, currentSimulationYear, remainingBitcoin, retirementInputs.annualWithdrawal, remainingCash);
-        const bitcoinWeight = (remainingBitcoin * bitcoinPrice) / portfolioValue;
-        const cashWeight = remainingCash / portfolioValue;
-        const blendedRate = (bitcoinWeight * yearRates.bitcoinRate) + (cashWeight * yearRates.cashRate);
-        
-        // Check if we can retire at this point
-        if (portfolioValue * blendedRate >= retirementInputs.annualWithdrawal) {
-          console.log(`Smart retirement simulation found retirement date: ${dataPoint.date}
-            Remaining cash: $${remainingCash.toLocaleString()}
-            Remaining Bitcoin: ${remainingBitcoin.toFixed(4)} BTC
-            Bitcoin price: $${bitcoinPrice.toLocaleString()}
-            Portfolio value: $${portfolioValue.toLocaleString()}
-            Blended withdrawal rate: ${(blendedRate * 100).toFixed(2)}%
-            Safe annual withdrawal: $${(portfolioValue * blendedRate).toLocaleString()}`);
-          
-          return {
-            canRetire: false, // Will be true when we find the date
-            retirementDate: dataPoint.date,
-            retirementDataPoint: dataPoint
-          };
-        }
-        
-                 // Smart spending strategy:
-         // Determine if Bitcoin is above or below fair value
-         // For future projections, we'll assume Bitcoin cycles around fair value
-         // We'll use a simple model: Bitcoin is "below fair value" 60% of the time, "above" 40% of the time
-         const currentFairValueRatio = currentPrice && currentDataPoint ? currentPrice / currentDataPoint.powerLawPrice : 1;
-         const isCurrentlyBelowFair = currentFairValueRatio < 1;
-         
-         // For future dates, simulate market cycles
-         // Assume Bitcoin spends more time below fair value (accumulation phase) than above (distribution phase)
-         const daysSinceToday = Math.floor((dataPoint.timestamp - today.getTime()) / (24 * 60 * 60 * 1000));
-         const cyclePosition = (daysSinceToday % 1460) / 1460; // 4-year cycle
-         const isBelowFairValue = isCurrentlyBelowFair ? 
-           (cyclePosition < 0.7) : // If currently below, assume 70% of time below fair
-           (cyclePosition < 0.5);  // If currently above, assume 50% of time below fair
-         
-         if (isBelowFairValue) {
-           // Below fair value - spend cash first (HODLing strategy)
-           if (remainingCash >= monthlyWithdrawal) {
-             remainingCash -= monthlyWithdrawal;
-           } else {
-             // Not enough cash, must sell Bitcoin
-             const cashShortfall = monthlyWithdrawal - remainingCash;
-             const bitcoinToSell = cashShortfall / bitcoinPrice;
-             remainingCash = 0;
-             remainingBitcoin = Math.max(0, remainingBitcoin - bitcoinToSell);
-           }
-         } else {
-           // Above fair value - sell Bitcoin first (taking profits)
-           const bitcoinToSell = monthlyWithdrawal / bitcoinPrice;
-           if (remainingBitcoin >= bitcoinToSell) {
-             remainingBitcoin -= bitcoinToSell;
-           } else {
-             // Not enough Bitcoin, use remaining Bitcoin + cash
-             const bitcoinValue = remainingBitcoin * bitcoinPrice;
-             const cashNeeded = monthlyWithdrawal - bitcoinValue;
-             remainingBitcoin = 0;
-             remainingCash = Math.max(0, remainingCash - cashNeeded);
-           }
-         }
-        
-        // If we run out of both assets, retirement is not possible
-        if (remainingCash <= 0 && remainingBitcoin <= 0) {
-          return { canRetire: false };
-        }
-      }
-    }
-    
-    // If we made it through the entire simulation with assets remaining, 
-    // but never hit the safe withdrawal threshold, return the last viable date
-    if (remainingCash > 0 || remainingBitcoin > 0) {
-      const lastDataPoint = futureData[futureData.length - 1];
-      const finalPortfolioValue = remainingCash + (remainingBitcoin * lastDataPoint.powerLawPrice);
-      const finalYear = new Date(lastDataPoint.date).getFullYear();
-      const finalRates = calculateBearMarketSWR(lastDataPoint.powerLawPrice, finalYear, remainingBitcoin, retirementInputs.annualWithdrawal, remainingCash);
-      
-      const finalBitcoinWeight = (remainingBitcoin * lastDataPoint.powerLawPrice) / finalPortfolioValue;
-      const finalCashWeight = remainingCash / finalPortfolioValue;
-      const finalBlendedRate = (finalBitcoinWeight * finalRates.bitcoinRate) + (finalCashWeight * finalRates.cashRate);
-      
-      if (finalPortfolioValue * finalBlendedRate >= retirementInputs.annualWithdrawal) {
-        return {
-          canRetire: false,
-          retirementDate: lastDataPoint.date,
-          retirementDataPoint: lastDataPoint
-        };
-      }
-    }
-    
-    return { canRetire: false };
   };
 
   const handleInputChange = (field: keyof RetirementInputs, value: number) => {
@@ -849,23 +420,7 @@ const BitcoinChart: React.FC = () => {
     }));
   };
 
-  const getRiskExplanation = (fairValueRatio: number): string => {
-    if (fairValueRatio >= 2.0) {
-      return "Above Power Law ceiling - SWR calculated to survive realistic 60% crash bear market. Historical data shows major corrections from this level. Bear Market Test provides robust protection.";
-    } else if (fairValueRatio >= 1.8) {
-      return "Approaching Power Law ceiling - SWR stress-tested against 60% crash scenario. This level has historically led to significant corrections. Bear Market methodology ensures cycle protection.";
-    } else if (fairValueRatio >= 1.4) {
-      return "Significantly above fair value - Bear Market Test applied. Historically leads to 40-60% corrections. SWR designed to survive 2-year recovery cycle.";
-    } else if (fairValueRatio >= 1.1) {
-      return "Near fair value - Bear Market SWR calculated. Normal volatility expected, but protected against realistic crash and recovery scenarios.";
-    } else if (fairValueRatio >= 0.8) {
-      return "Below fair value - Bear Market Test still applied for protection. Even from this safer position, SWR ensures bear market cycle survival.";
-    } else if (fairValueRatio >= 0.5) {
-      return "Deep value territory - Bear Market methodology provides conservative protection. Excellent risk/reward with stress-testing against cycle downturns.";
-    } else {
-      return "Near Power Law floor - Bear Market Test ensures sustainability from this strong position. Protection against any realistic market scenario.";
-    }
-  };
+
 
   const formatPrice = (value: number): string => {
     if (value >= 1000000) {
@@ -877,8 +432,6 @@ const BitcoinChart: React.FC = () => {
     }
   };
 
-
-
   const formatTooltipDate = (timestamp: number): string => {
     return new Date(timestamp).toLocaleDateString('en-US', {
       year: 'numeric',
@@ -887,60 +440,7 @@ const BitcoinChart: React.FC = () => {
     });
   };
 
-  const calculateActualBitcoinSWR = (bitcoinPrice: number): string => {
-    const currentYear = new Date().getFullYear();
-    const marketConditions = calculateMarketBasedSWR(bitcoinPrice, currentYear);
-    return (marketConditions.bitcoinRate * 100).toFixed(1);
-  };
 
-  const calculateActualBitcoinSWRDecimal = (bitcoinPrice: number): number => {
-    const currentYear = new Date().getFullYear();
-    const marketConditions = calculateMarketBasedSWR(bitcoinPrice, currentYear);
-    
-    // Override with 50-year simulation test if we have sufficient inputs
-    if (retirementInputs.bitcoinAmount > 0 && retirementInputs.annualWithdrawal > 0) {
-      const simulation = simulate50YearWithdrawals();
-      const simulationSucceeds = simulation.length >= 50 && 
-        simulation[simulation.length - 1].remainingBitcoin > 0 &&
-        simulation[simulation.length - 1].totalRemainingValue > 0;
-      
-      if (!simulationSucceeds) {
-        // If 50-year simulation fails, reduce SWR significantly
-        const yearsUntilDepletion = simulation.findIndex(s => s.remainingBitcoin <= 0 && s.remainingCash <= 0);
-        const depletionYear = yearsUntilDepletion > 0 ? yearsUntilDepletion + 1 : simulation.length;
-        
-        // Reduce SWR based on how far short we fall of 50 years
-        const shortfallFactor = Math.max(0.1, depletionYear / 50);
-        return marketConditions.bitcoinRate * shortfallFactor;
-      }
-    }
-    
-    return marketConditions.bitcoinRate;
-  };
-
-  // Calculate evolving floor ratio - starts at 42% (58% drawdown) and gradually increases to 80% (20% drawdown)
-  const calculateEvolvingFloorRatio = (year: number): number => {
-    const yearsSinceStart = year - 2025; // Years since Bitcoin maturity baseline
-    const maturityFactor = Math.min(yearsSinceStart / 30, 1); // 30-year transition to full maturity
-    
-    // Start at 42% floor (58% drawdown), end at 80% floor (20% drawdown)
-    const startFloor = 0.42;
-    const endFloor = 0.80;
-    
-    return startFloor + (endFloor - startFloor) * maturityFactor;
-  };
-  
-  // Calculate evolving bull multiplier - starts high and decreases as Bitcoin matures  
-  const calculateEvolvingBullMultiplier = (year: number): number => {
-    const yearsSinceStart = year - 2025;
-    const maturityFactor = Math.min(yearsSinceStart / 30, 1);
-    
-    // Start at 2.0x fair value, end at 1.3x fair value (less extreme cycles)
-    const startMultiplier = 2.0;
-    const endMultiplier = 1.3;
-    
-    return startMultiplier - (startMultiplier - endMultiplier) * maturityFactor;
-  };
 
   const simulate50YearWithdrawals = () => {
     // Only simulate if we have withdrawal needs and either starting Bitcoin OR monthly savings plan
@@ -953,7 +453,6 @@ const BitcoinChart: React.FC = () => {
     const currentYear = new Date().getFullYear();
     const yearsToRetirement = monthlySavingsInputs.enabled ? monthlySavingsInputs.yearsToRetirement : 0;
     const retirementStartYear = currentYear + yearsToRetirement;
-    const inflationRate = 0.08; // 8% annual inflation
 
     // Phase 1: Accumulation Phase (if monthly savings enabled)
     // Use the same calculation as retirement analysis for consistency
@@ -992,32 +491,31 @@ const BitcoinChart: React.FC = () => {
         if (yearData) {
           cumulativeCashInvested += yearData.cashInvested;
           
-          // Add realistic cycles during accumulation phase too
-          // Simulate 4-year cycles: Recovery -> Bull -> Peak -> Bear
+          // Simple 4-year cycles using standard Power Law bands
           const cycleYear = year % 4;
           const isBearMarketYear = cycleYear === 3;
+          const cycleDate = new Date(simulationYear, 0, 1);
+          const floorValue = BitcoinPowerLaw.calculateFloorPrice(cycleDate);
+          const upperBound = BitcoinPowerLaw.calculateUpperBound(cycleDate);
           let cyclePrice;
           let cyclePhase = '';
           
           switch (cycleYear) {
             case 0: // Recovery year - between floor and fair
-              const recoveryFloorRatio = calculateEvolvingFloorRatio(simulationYear);
-              cyclePrice = (bitcoinFairValue * recoveryFloorRatio + bitcoinFairValue) / 2;
+              cyclePrice = (floorValue + bitcoinFairValue) / 2;
               cyclePhase = 'Recovery';
               break;
-            case 1: // Bull run - above fair value (but less extreme over time)
-              const bullMultiplier = calculateEvolvingBullMultiplier(simulationYear);
-              cyclePrice = bitcoinFairValue * bullMultiplier;
-              cyclePhase = `Bull (${bullMultiplier.toFixed(1)}x Fair)`;
+            case 1: // Bull run - between fair and upper bound
+              cyclePrice = (bitcoinFairValue + upperBound) / 2;
+              cyclePhase = 'Bull';
               break;
             case 2: // Peak/correction - back to fair value
               cyclePrice = bitcoinFairValue;
               cyclePhase = 'Peak/Correction';
               break;
-            case 3: // Bear market - drop to evolved floor
-              const bearFloorRatio = calculateEvolvingFloorRatio(simulationYear);
-              cyclePrice = bitcoinFairValue * bearFloorRatio;
-              cyclePhase = `Bear (${Math.round(bearFloorRatio * 100)}% Floor)`;
+            case 3: // Bear market - drop to Power Law floor
+              cyclePrice = floorValue;
+              cyclePhase = 'Bear (Power Law Floor)';
               break;
             default:
               cyclePrice = bitcoinFairValue;
@@ -1094,43 +592,42 @@ const BitcoinChart: React.FC = () => {
       // Calculate Bitcoin fair value
       const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
       
-      // Simulate Bitcoin cycle phases (4-year cycles)
-      const cycleYear = year % 4;
+      // Simulate simple Bitcoin cycle phases (4-year cycles using standard Power Law bands)
       let bitcoinPrice;
       let cyclePhase = '';
       
-            if (year === 0) {
+      if (year === 0) {
         // For retirement year (year 0 of simulation), use fair value at retirement date
-        bitcoinPrice = BitcoinPowerLaw.calculateFairValue(targetDate);
+        bitcoinPrice = fairValue;
         cyclePhase = 'Retirement Start (Fair Value)';
       } else {
-        // Simulate 4-year cycles with evolving volatility - less extreme as Bitcoin matures
+        // Simple 4-year cycles using standard Power Law bands
         const adjustedCycleYear = (year - 1) % 4;
-         switch (adjustedCycleYear) {
-           case 0: // Bear market - drop to evolving floor (years 1, 5, 9, etc.)
-             const bearFloorRatio = calculateEvolvingFloorRatio(currentSimulationYear);
-             bitcoinPrice = fairValue * bearFloorRatio;
-             cyclePhase = `Bear (${Math.round(bearFloorRatio * 100)}% Floor)`;
-             break;
-           case 1: // Recovery year - between floor and fair (years 2, 6, 10, etc.)
-             const recoveryFloorRatio = calculateEvolvingFloorRatio(currentSimulationYear);
-             bitcoinPrice = (fairValue * recoveryFloorRatio + fairValue) / 2;
-             cyclePhase = 'Recovery';
-             break;
-           case 2: // Bull run - above fair value but less extreme over time (years 3, 7, 11, etc.)
-             const bullMultiplier = calculateEvolvingBullMultiplier(currentSimulationYear);
-             bitcoinPrice = fairValue * bullMultiplier;
-             cyclePhase = `Bull (${bullMultiplier.toFixed(1)}x Fair)`;
-             break;
-           case 3: // Peak/correction - at fair value (years 4, 8, 12, etc.)
-             bitcoinPrice = fairValue;
-             cyclePhase = 'Peak/Correction';
-             break;
-           default:
-             bitcoinPrice = fairValue;
-             cyclePhase = 'Fair Value';
-         }
-       }
+        const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
+        const upperBound = BitcoinPowerLaw.calculateUpperBound(targetDate);
+        
+        switch (adjustedCycleYear) {
+          case 0: // Bear market - drop to Power Law floor
+            bitcoinPrice = floorValue;
+            cyclePhase = 'Bear (Power Law Floor)';
+            break;
+          case 1: // Recovery year - between floor and fair
+            bitcoinPrice = (floorValue + fairValue) / 2;
+            cyclePhase = 'Recovery';
+            break;
+          case 2: // Bull run - between fair and upper bound
+            bitcoinPrice = (fairValue + upperBound) / 2;
+            cyclePhase = 'Bull';
+            break;
+          case 3: // Peak/correction - at fair value
+            bitcoinPrice = fairValue;
+            cyclePhase = 'Peak/Correction';
+            break;
+          default:
+            bitcoinPrice = fairValue;
+            cyclePhase = 'Fair Value';
+        }
+      }
       
       // Calculate price ratio for all years
       const priceToFairRatio = bitcoinPrice / fairValue;
@@ -1338,13 +835,7 @@ const BitcoinChart: React.FC = () => {
 
       {/* Retirement Calculator Inputs */}
       <div className="retirement-section">
-        <h3>🏠 Smart Bitcoin Retirement Calculator</h3>
-        <div className="strategy-explanation">
-          <p>📈 <strong>Smart Strategy:</strong> Use cash when Bitcoin is below fair value (preserve Bitcoin), sell Bitcoin when above fair value (take profits). 
-          <br/><strong>50-Year Simulator:</strong> Models realistic 4-year Bitcoin cycles with bear markets, recovery, and bull phases. Cash loses value to inflation.
-          <br/><strong>Real Test:</strong> Shows exact year-by-year withdrawals, asset depletion risks, and whether your retirement actually survives 50 years.
-          <br/><strong>Starting from Zero:</strong> Enter 0 BTC if you're just beginning your stacking journey - monthly savings will build your stack!</p>
-        </div>
+        <h3>Retirement Inputs</h3>
         <div className="retirement-inputs">
           <div className="input-group">
             <label htmlFor="bitcoinAmount">Bitcoin Holdings:</label>
@@ -1392,7 +883,7 @@ const BitcoinChart: React.FC = () => {
         {/* Monthly Savings Component */}
         <div className="monthly-savings-section">
           <div className="savings-header">
-            <h4>💰 Monthly Savings (Still Earning)</h4>
+            <h4>Monthly Savings (Still Earning)</h4>
             <label className="savings-toggle">
               <input
                 type="checkbox"
@@ -1405,10 +896,7 @@ const BitcoinChart: React.FC = () => {
           
           {monthlySavingsInputs.enabled && (
             <>
-              <div className="savings-explanation">
-                <p>📈 <strong>Assumptions:</strong> Monthly savings increase 4% annually (official inflation/wage growth). Bitcoin purchases at Power Law fair value each month (harder to earn sats over time).</p>
-              </div>
-              
+            
               <div className="savings-inputs">
                 <div className="input-group">
                   <label htmlFor="monthlySavingsAmount">Monthly Savings Amount:</label>
@@ -1446,11 +934,8 @@ const BitcoinChart: React.FC = () => {
                       checked={monthlySavingsInputs.doubleDownInBearMarkets}
                       onChange={(e) => handleSavingsInputChange('doubleDownInBearMarkets', e.target.checked)}
                     />
-                    <span>🐻 Double Down in Bear Markets</span>
+                    <span>Double Down in Bear Markets</span>
                   </label>
-                  <p className="strategy-explanation">
-                    <strong>Smart Strategy:</strong> During every 4th year (bear market cycle), double your monthly savings to buy 2x more Bitcoin when prices are low. This supercharges long-term accumulation.
-                  </p>
                 </div>
               </div>
 
@@ -1461,7 +946,7 @@ const BitcoinChart: React.FC = () => {
                   
                   {monthlySavingsInputs.doubleDownInBearMarkets && (
                     <div className="bear-market-info">
-                      <p><strong>🐻 Bear Market Strategy Active:</strong> Doubling savings every 4th year (years with cycle year 0) to maximize Bitcoin accumulation during low prices!</p>
+                      <p><strong>Bear Market Strategy Active:</strong> Doubling savings every 4th year (years with cycle year 0) to maximize Bitcoin accumulation during low prices!</p>
                     </div>
                   )}
                   
@@ -1695,7 +1180,7 @@ const BitcoinChart: React.FC = () => {
                   </div>
                   <div className="current-status">
                                           <div className="projection-item">
-                        <span className="projection-label">💰 Total Assets (Including Projections):</span>
+                        <span className="projection-label">Total Assets (Including Projections):</span>
                         <span className="projection-value">
                                                   {formatPrice(
                           (retirementInputs.bitcoinAmount + (monthlySavingsInputs.enabled && savingsProjection.length > 0 ? savingsProjection[savingsProjection.length - 1].totalBitcoinAccumulated : 0)) * currentPrice + 
@@ -1704,7 +1189,7 @@ const BitcoinChart: React.FC = () => {
                         </span>
                       </div>
                     <div className="projection-item">
-                      <span className="projection-label">📅 Annual Withdrawal Need:</span>
+                      <span className="projection-label">Annual Withdrawal Need:</span>
                       <span className="projection-value">{formatPrice(retirementInputs.annualWithdrawal)}</span>
                     </div>
                   </div>
