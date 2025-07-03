@@ -29,6 +29,7 @@ export interface MonthlySavingsInputs {
   monthlySavingsAmount: number;
   yearsToRetirement: number;
   enabled: boolean;
+  doubleDownInBearMarkets: boolean;
 }
 
 export interface SavingsProjection {

@@ -23,6 +23,7 @@ const BitcoinChart: React.FC = () => {
   const [currentFairValue, setCurrentFairValue] = useState<number | null>(null);
   const [currentFloorValue, setCurrentFloorValue] = useState<number | null>(null);
   const [currentUpperBound, setCurrentUpperBound] = useState<number | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   
   // Retirement functionality state
   const [retirementInputs, setRetirementInputs] = useState<RetirementInputs>({
@@ -33,13 +34,22 @@ const BitcoinChart: React.FC = () => {
   const [monthlySavingsInputs, setMonthlySavingsInputs] = useState<MonthlySavingsInputs>({
     monthlySavingsAmount: 1000,
     yearsToRetirement: 10,
-    enabled: false
+    enabled: false,
+    doubleDownInBearMarkets: false
   });
   const [retirementStatus, setRetirementStatus] = useState<RetirementStatus | null>(null);
   const [historicalRetirementDate, setHistoricalRetirementDate] = useState<ChartDataPoint | null>(null);
 
   useEffect(() => {
     loadChartData();
+    
+    // Auto-refresh every 5 minutes to keep data current
+    const refreshInterval = setInterval(() => {
+      console.log('Auto-refreshing Bitcoin data...');
+      loadChartData();
+    }, 5 * 60 * 1000); // 5 minutes
+    
+    return () => clearInterval(refreshInterval);
   }, []);
 
 
@@ -54,14 +64,35 @@ const BitcoinChart: React.FC = () => {
       
               // Get current price from API
       try {
+        console.log('Fetching current Bitcoin price from API...');
         const current = await BitcoinAPI.getCurrentPrice();
+        console.log(`Current Bitcoin price from API: $${current.toLocaleString()}`);
         setCurrentPrice(current);
       } catch (error) {
-        console.log('API current price failed, using latest historical price');
+        console.log('API current price failed, trying alternative approach...');
+        
+        // Try to get the most recent price from the historical data (could be from API supplement)
         if (historicalPrices.length > 0) {
           const latestPrice = historicalPrices[historicalPrices.length - 1].price;
           setCurrentPrice(latestPrice);
-          console.log(`Using latest historical price: $${latestPrice}`);
+          console.log(`Using latest historical price: $${latestPrice.toLocaleString()}`);
+        } else {
+          // If no historical data, try a simple fallback API call
+          try {
+            console.log('Trying alternative API endpoint...');
+            const alternativeResponse = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=BTC');
+            const alternativeData = await alternativeResponse.json();
+            const alternativePrice = parseFloat(alternativeData.data.rates.USD);
+            if (!isNaN(alternativePrice)) {
+              setCurrentPrice(alternativePrice);
+              console.log(`Using alternative API price: $${alternativePrice.toLocaleString()}`);
+            }
+          } catch (alternativeError) {
+            console.log('All price sources failed, using Power Law fair value as estimate');
+            const fallbackPrice = BitcoinPowerLaw.calculateFairValue(new Date());
+            setCurrentPrice(fallbackPrice);
+            console.log(`Using Power Law fair value as fallback: $${fallbackPrice.toLocaleString()}`);
+          }
         }
       }
 
@@ -125,6 +156,7 @@ const BitcoinChart: React.FC = () => {
       combinedData.sort((a, b) => a.timestamp - b.timestamp);
 
       setChartData(combinedData);
+      setLastUpdated(new Date());
     } catch (err) {
       console.error('Error loading chart data:', err);
       setError('Failed to load chart data. Please try again.');
@@ -153,6 +185,11 @@ const BitcoinChart: React.FC = () => {
         currentMonthlySavings *= 1.08; // 8% real inflation
       }
 
+      // Determine if this year is a bear market (every 4th year starting from year 3)
+      // Align with simulation cycles: year 3, 7, 11, etc. are bear markets
+      const cycleYear = year % 4;
+      const isBearMarketYear = cycleYear === 3;
+      
       for (let month = 0; month < 12; month++) {
         const projectionDate = new Date(startDate);
         projectionDate.setFullYear(startDate.getFullYear() + year);
@@ -161,15 +198,31 @@ const BitcoinChart: React.FC = () => {
         // Calculate Bitcoin fair value for this future date
         const bitcoinFairValue = BitcoinPowerLaw.calculateFairValue(projectionDate);
         
+        // Determine actual monthly savings amount for this month
+        let actualMonthlySavings = currentMonthlySavings;
+        if (monthlySavingsInputs.doubleDownInBearMarkets && isBearMarketYear) {
+          actualMonthlySavings = currentMonthlySavings * 2; // Double down during bear markets!
+          
+          // Debug logging for bear market doubling
+          if (month === 0) { // Only log once per year
+            console.log(`🐻 MONTHLY SAVINGS DEBUG - Year ${year + 1} (${new Date().getFullYear() + year}):
+              Cycle Year: ${cycleYear}
+              Is Bear Market: ${isBearMarketYear}
+              Base Monthly Amount: $${Math.round(currentMonthlySavings)}
+              Doubled Monthly Amount: $${Math.round(actualMonthlySavings)}
+              Expected Yearly Total: $${Math.round(actualMonthlySavings * 12)}`);
+          }
+        }
+        
         // Calculate how much Bitcoin can be purchased with this month's savings
-        const bitcoinPurchased = currentMonthlySavings / bitcoinFairValue;
+        const bitcoinPurchased = actualMonthlySavings / bitcoinFairValue;
         totalBitcoinAccumulated += bitcoinPurchased;
-        totalCashInvested += currentMonthlySavings;
+        totalCashInvested += actualMonthlySavings;
 
         projection.push({
           year: year + 1,
           month: month + 1,
-          monthlySavingsAmount: currentMonthlySavings,
+          monthlySavingsAmount: actualMonthlySavings,
           bitcoinFairValue: bitcoinFairValue,
           bitcoinPurchased: bitcoinPurchased,
           totalBitcoinAccumulated: totalBitcoinAccumulated,
@@ -184,7 +237,7 @@ const BitcoinChart: React.FC = () => {
   // Memoize the monthly savings projection calculation
   const savingsProjection = useMemo(() => {
     return calculateMonthlySavingsProjection();
-  }, [monthlySavingsInputs.enabled, monthlySavingsInputs.monthlySavingsAmount, monthlySavingsInputs.yearsToRetirement]);
+  }, [monthlySavingsInputs.enabled, monthlySavingsInputs.monthlySavingsAmount, monthlySavingsInputs.yearsToRetirement, monthlySavingsInputs.doubleDownInBearMarkets]);
 
   const calculateRetirementStatus = () => {
     if (!currentPrice) return;
@@ -376,8 +429,9 @@ const BitcoinChart: React.FC = () => {
               // Use the actual cash holdings passed to the function
         let remainingCash = Math.max(0, cashHoldings);
       
-      // Year 1: 60% crash from current price - use cash first to preserve Bitcoin
-      const crashPrice = bitcoinPrice * 0.4; // 60% drop
+      // Year 1: Evolving crash severity - less severe as Bitcoin matures
+      const floorRatio = calculateEvolvingFloorRatio(year);
+      const crashPrice = fairValue * floorRatio; // Use evolving floor instead of static 60% drop
       
       // Smart strategy: Use cash first during the crash
       if (remainingCash >= annualWithdrawal) {
@@ -586,8 +640,9 @@ const BitcoinChart: React.FC = () => {
     const targetDate = new Date(year, 0, 1);
     const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
     
-    // Year 1: 60% crash from current price - use cash first to preserve Bitcoin
-    const crashPrice = bitcoinPrice * 0.4; // 60% drop
+    // Year 1: Evolving crash severity - less severe as Bitcoin matures
+    const floorRatio = calculateEvolvingFloorRatio(year);
+    const crashPrice = fairValue * floorRatio; // Use evolving floor instead of static 60% drop
     
     // Smart strategy: Use cash first during the crash
     if (remainingCash >= annualWithdrawal) {
@@ -603,8 +658,8 @@ const BitcoinChart: React.FC = () => {
       if (remainingBitcoin < 0) return { passes: false }; // Ran out of Bitcoin in year 1
     }
     
-    // Year 2: Recovery year (60% of fair value) - gradual recovery
-    const recoveryPrice = fairValue * 0.6; // Still 40% down from fair value
+    // Year 2: Recovery year - gradual recovery using evolving floor
+    const recoveryPrice = (fairValue * floorRatio + fairValue) / 2; // Halfway between floor and fair value
     if (remainingCash >= annualWithdrawal) {
       remainingCash -= annualWithdrawal;
     } else {
@@ -873,6 +928,30 @@ const BitcoinChart: React.FC = () => {
     return marketConditions.bitcoinRate;
   };
 
+  // Calculate evolving floor ratio - starts at 42% (58% drawdown) and gradually increases to 80% (20% drawdown)
+  const calculateEvolvingFloorRatio = (year: number): number => {
+    const yearsSinceStart = year - 2025; // Years since Bitcoin maturity baseline
+    const maturityFactor = Math.min(yearsSinceStart / 30, 1); // 30-year transition to full maturity
+    
+    // Start at 42% floor (58% drawdown), end at 80% floor (20% drawdown)
+    const startFloor = 0.42;
+    const endFloor = 0.80;
+    
+    return startFloor + (endFloor - startFloor) * maturityFactor;
+  };
+  
+  // Calculate evolving bull multiplier - starts high and decreases as Bitcoin matures  
+  const calculateEvolvingBullMultiplier = (year: number): number => {
+    const yearsSinceStart = year - 2025;
+    const maturityFactor = Math.min(yearsSinceStart / 30, 1);
+    
+    // Start at 2.0x fair value, end at 1.3x fair value (less extreme cycles)
+    const startMultiplier = 2.0;
+    const endMultiplier = 1.3;
+    
+    return startMultiplier - (startMultiplier - endMultiplier) * maturityFactor;
+  };
+
   const simulate50YearWithdrawals = () => {
     if (!currentPrice || retirementInputs.bitcoinAmount <= 0 || retirementInputs.annualWithdrawal <= 0) {
       return [];
@@ -902,16 +981,16 @@ const BitcoinChart: React.FC = () => {
       
       // Process savings projection data to create yearly summaries
       for (const monthData of savingsProjection) {
-        const year = currentYear + monthData.year; // Convert to actual year (monthData.year starts at 1)
-        if (!yearlyAggregation[year]) {
-          yearlyAggregation[year] = {bitcoinPurchased: 0, cashInvested: 0, endingBitcoin: 0};
+        const actualYear = currentYear + monthData.year - 1; // Convert to actual year (monthData.year starts at 1, but we want year 0-based)
+        if (!yearlyAggregation[actualYear]) {
+          yearlyAggregation[actualYear] = {bitcoinPurchased: 0, cashInvested: 0, endingBitcoin: 0};
         }
-        yearlyAggregation[year].bitcoinPurchased += monthData.bitcoinPurchased;
-        yearlyAggregation[year].cashInvested += monthData.monthlySavingsAmount;
-        yearlyAggregation[year].endingBitcoin = retirementInputs.bitcoinAmount + monthData.totalBitcoinAccumulated;
+        yearlyAggregation[actualYear].bitcoinPurchased += monthData.bitcoinPurchased;
+        yearlyAggregation[actualYear].cashInvested += monthData.monthlySavingsAmount; // This is the actual monthly amount (including doubling)
+        yearlyAggregation[actualYear].endingBitcoin = retirementInputs.bitcoinAmount + monthData.totalBitcoinAccumulated;
       }
       
-      // Create simulation entries for each year using aggregated data
+      // Create simulation entries for each year using aggregated data with realistic cycles
       for (let year = 0; year < yearsToRetirement; year++) {
         const simulationYear = currentYear + year;
         const targetDate = new Date(simulationYear, 0, 1);
@@ -920,23 +999,74 @@ const BitcoinChart: React.FC = () => {
         
         if (yearData) {
           cumulativeCashInvested += yearData.cashInvested;
+          
+          // Add realistic cycles during accumulation phase too
+          // Simulate 4-year cycles: Recovery -> Bull -> Peak -> Bear
+          const cycleYear = year % 4;
+          const isBearMarketYear = cycleYear === 3;
+          let cyclePrice;
+          let cyclePhase = '';
+          
+          switch (cycleYear) {
+            case 0: // Recovery year - between floor and fair
+              const recoveryFloorRatio = calculateEvolvingFloorRatio(simulationYear);
+              cyclePrice = (bitcoinFairValue * recoveryFloorRatio + bitcoinFairValue) / 2;
+              cyclePhase = 'Recovery';
+              break;
+            case 1: // Bull run - above fair value (but less extreme over time)
+              const bullMultiplier = calculateEvolvingBullMultiplier(simulationYear);
+              cyclePrice = bitcoinFairValue * bullMultiplier;
+              cyclePhase = `Bull (${bullMultiplier.toFixed(1)}x Fair)`;
+              break;
+            case 2: // Peak/correction - back to fair value
+              cyclePrice = bitcoinFairValue;
+              cyclePhase = 'Peak/Correction';
+              break;
+            case 3: // Bear market - drop to evolved floor
+              const bearFloorRatio = calculateEvolvingFloorRatio(simulationYear);
+              cyclePrice = bitcoinFairValue * bearFloorRatio;
+              cyclePhase = `Bear (${Math.round(bearFloorRatio * 100)}% Floor)`;
+              break;
+            default:
+              cyclePrice = bitcoinFairValue;
+              cyclePhase = 'Fair Value';
+          }
+          
+          // Debug logging for bear market years
+          if (isBearMarketYear) {
+            console.log(`🐻 BEAR MARKET DEBUG - Year ${simulationYear}:
+              Year Data Cash Invested: $${yearData.cashInvested.toLocaleString()}
+              Year Data Bitcoin Purchased: ${yearData.bitcoinPurchased.toFixed(6)} BTC
+              Cycle Year: ${cycleYear}
+              Bitcoin Fair Value: $${bitcoinFairValue.toLocaleString()}
+              Cycle Price: $${cyclePrice.toLocaleString()}
+              Expected Bitcoin (cash/price): ${(yearData.cashInvested / cyclePrice).toFixed(6)} BTC
+              Double Down Enabled: ${monthlySavingsInputs.doubleDownInBearMarkets}`);
+          }
+          
+          // Create withdrawal source description with bear market indicator
+          let withdrawalSource = `Investing $${Math.round(yearData.cashInvested).toLocaleString()}/year`;
+          if (monthlySavingsInputs.doubleDownInBearMarkets && isBearMarketYear) {
+            withdrawalSource += ' 🐻 (2x Bear Market!)';
+          }
+          
           simulation.push({
             year: simulationYear,
             yearNumber: year + 1,
             phase: 'ACCUMULATION',
-            bitcoinPrice: bitcoinFairValue,
+            bitcoinPrice: cyclePrice,
             fairValue: bitcoinFairValue,
-            priceToFairRatio: 1.0,
-            cyclePhase: 'Savings (Fair Value)',
+            priceToFairRatio: cyclePrice / bitcoinFairValue,
+            cyclePhase: cyclePhase,
             annualWithdrawal: 0,
-            withdrawalSource: `Investing $${Math.round(yearData.cashInvested).toLocaleString()}/year`,
+            withdrawalSource: withdrawalSource,
             cashUsed: 0,
             bitcoinSold: 0,
             bitcoinPurchased: yearData.bitcoinPurchased,
             remainingCash: retirementInputs.cashAmount,
             remainingBitcoin: yearData.endingBitcoin,
-            remainingBitcoinValue: yearData.endingBitcoin * bitcoinFairValue,
-            totalRemainingValue: yearData.endingBitcoin * bitcoinFairValue + retirementInputs.cashAmount,
+            remainingBitcoinValue: yearData.endingBitcoin * cyclePrice,
+            totalRemainingValue: yearData.endingBitcoin * cyclePrice + retirementInputs.cashAmount,
             totalCashInvested: cumulativeCashInvested // Cumulative total for cash flow calculation
           });
         }
@@ -983,20 +1113,23 @@ const BitcoinChart: React.FC = () => {
         bitcoinPrice = BitcoinPowerLaw.calculateFairValue(targetDate);
         cyclePhase = 'Retirement Start (Fair Value)';
       } else {
-        // Simulate 4-year cycles starting with bear market in year 1 of retirement
+        // Simulate 4-year cycles with evolving volatility - less extreme as Bitcoin matures
         const adjustedCycleYear = (year - 1) % 4;
          switch (adjustedCycleYear) {
-           case 0: // Bear market - drop to floor (years 1, 5, 9, etc.)
-             bitcoinPrice = BitcoinPowerLaw.calculateFloorPrice(targetDate);
-             cyclePhase = 'Bear (Floor)';
+           case 0: // Bear market - drop to evolving floor (years 1, 5, 9, etc.)
+             const bearFloorRatio = calculateEvolvingFloorRatio(currentSimulationYear);
+             bitcoinPrice = fairValue * bearFloorRatio;
+             cyclePhase = `Bear (${Math.round(bearFloorRatio * 100)}% Floor)`;
              break;
            case 1: // Recovery year - between floor and fair (years 2, 6, 10, etc.)
-             bitcoinPrice = (BitcoinPowerLaw.calculateFloorPrice(targetDate) + fairValue) / 2;
+             const recoveryFloorRatio = calculateEvolvingFloorRatio(currentSimulationYear);
+             bitcoinPrice = (fairValue * recoveryFloorRatio + fairValue) / 2;
              cyclePhase = 'Recovery';
              break;
-           case 2: // Bull run - above fair value (years 3, 7, 11, etc.)
-             bitcoinPrice = fairValue * 1.5;
-             cyclePhase = 'Bull';
+           case 2: // Bull run - above fair value but less extreme over time (years 3, 7, 11, etc.)
+             const bullMultiplier = calculateEvolvingBullMultiplier(currentSimulationYear);
+             bitcoinPrice = fairValue * bullMultiplier;
+             cyclePhase = `Bull (${bullMultiplier.toFixed(1)}x Fair)`;
              break;
            case 3: // Peak/correction - at fair value (years 4, 8, 12, etc.)
              bitcoinPrice = fairValue;
@@ -1163,6 +1296,32 @@ const BitcoinChart: React.FC = () => {
     <div className="chart-container">
       <div className="chart-header">
         <h2>Bitcoin Price vs Power Law Model</h2>
+        <button 
+          onClick={loadChartData} 
+          className="refresh-button"
+          disabled={loading}
+          style={{
+            background: '#f7931a',
+            color: 'white',
+            border: 'none',
+            padding: '8px 16px',
+            borderRadius: '4px',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            marginBottom: '10px',
+            fontSize: '14px'
+          }}
+        >
+          {loading ? '🔄 Refreshing...' : '🔄 Refresh Data'}
+        </button>
+        {lastUpdated && (
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#999', 
+            marginBottom: '10px' 
+          }}>
+            Last updated: {lastUpdated.toLocaleString()}
+          </div>
+        )}
         {currentPrice && currentFairValue && currentFloorValue && currentUpperBound && (
           <div className="current-stats">
             <div className="stat">
@@ -1304,12 +1463,33 @@ const BitcoinChart: React.FC = () => {
                   />
                   <span className="input-unit">years</span>
                 </div>
+                
+                <div className="input-group strategy-option">
+                  <label className="savings-toggle bear-market-toggle">
+                    <input
+                      type="checkbox"
+                      checked={monthlySavingsInputs.doubleDownInBearMarkets}
+                      onChange={(e) => handleSavingsInputChange('doubleDownInBearMarkets', e.target.checked)}
+                    />
+                    <span>🐻 Double Down in Bear Markets</span>
+                  </label>
+                  <p className="strategy-explanation">
+                    <strong>Smart Strategy:</strong> During every 4th year (bear market cycle), double your monthly savings to buy 2x more Bitcoin when prices are low. This supercharges long-term accumulation.
+                  </p>
+                </div>
               </div>
 
               {/* Savings Projection Summary */}
               {savingsProjection.length > 0 && (
                 <div className="savings-summary">
                   <h5>📊 Savings Projection Summary</h5>
+                  
+                  {monthlySavingsInputs.doubleDownInBearMarkets && (
+                    <div className="bear-market-info">
+                      <p><strong>🐻 Bear Market Strategy Active:</strong> Doubling savings every 4th year (years with cycle year 0) to maximize Bitcoin accumulation during low prices!</p>
+                    </div>
+                  )}
+                  
                   <div className="summary-stats">
                     <div className="stat-item">
                       <span className="stat-label">Additional Bitcoin Accumulated:</span>
@@ -1321,6 +1501,9 @@ const BitcoinChart: React.FC = () => {
                       <span className="stat-label">Total Cash Invested:</span>
                       <span className="stat-value">
                         ${savingsProjection[savingsProjection.length - 1].totalCashInvested.toLocaleString()}
+                        {monthlySavingsInputs.doubleDownInBearMarkets && (
+                          <small> (includes bear market doubling)</small>
+                        )}
                       </span>
                     </div>
                     <div className="stat-item">
