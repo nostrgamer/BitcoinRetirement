@@ -10,6 +10,7 @@
   color: #e8e8e8;
   margin-bottom: 20px;
   border-bottom: 1px solid rgba(247, 147, 26, 0.2);
+  position: relative;
 }
 
 .App-header h1 {
@@ -22,6 +23,31 @@
   margin: 0;
   font-size: 1.2rem;
   opacity: 0.8;
+}
+
+.github-link {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  color: #e8e8e8;
+  text-decoration: none;
+  padding: 8px;
+  border-radius: 6px;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.github-link:hover {
+  color: #f7931a;
+  background-color: rgba(247, 147, 26, 0.1);
+  transform: scale(1.1);
+}
+
+.github-link svg {
+  width: 24px;
+  height: 24px;
 }
 
 main {
@@ -156,10 +182,22 @@ main {
 @media (max-width: 768px) {
   .App-header h1 {
     font-size: 2rem;
+    padding-right: 60px; /* Leave space for GitHub link */
   }
   
   .App-header p {
     font-size: 1rem;
+  }
+  
+  .github-link {
+    top: 15px;
+    right: 15px;
+    padding: 6px;
+  }
+  
+  .github-link svg {
+    width: 20px;
+    height: 20px;
   }
   
   .current-stats {
