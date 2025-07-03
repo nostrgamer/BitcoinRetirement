@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { BitcoinAPI } from '../services/BitcoinAPI';
 import { BitcoinPowerLaw } from '../models/PowerLaw';
-import { ChartDataPoint, RetirementInputs, RetirementStatus, MonthlySavingsInputs, SavingsProjection } from '../types/Bitcoin';
+import { ChartDataPoint, RetirementInputs, MonthlySavingsInputs, SavingsProjection } from '../types/Bitcoin';
 
 const BitcoinChart: React.FC = () => {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
@@ -35,7 +35,6 @@ const BitcoinChart: React.FC = () => {
     enabled: false,
     doubleDownInBearMarkets: false
   });
-  const [retirementStatus, setRetirementStatus] = useState<RetirementStatus | null>(null);
   const [historicalRetirementDate, setHistoricalRetirementDate] = useState<ChartDataPoint | null>(null);
 
   useEffect(() => {
@@ -306,15 +305,7 @@ const BitcoinChart: React.FC = () => {
       Annual Withdrawal Need: $${retirementInputs.annualWithdrawal.toLocaleString()}
       Bear Market Test: ${bearMarketTestResult.passes ? 'PASSED' : 'FAILED'}`);
     
-    setRetirementStatus({
-      canRetire: bearMarketTestResult.passes,
-      totalAssets,
-      safeWithdrawalRate: 0, // Simplified - no longer using SWR concept
-      retirementDate: undefined,
-      retirementDataPoint: undefined,
-      riskLevel: 'Bear Market Test Based',
-      powerLawMetrics: undefined
-    });
+    // Results are logged above for debugging - no need to store in state
   }, [currentPrice, savingsProjection, monthlySavingsInputs.enabled, monthlySavingsInputs.yearsToRetirement, retirementInputs.bitcoinAmount, retirementInputs.annualWithdrawal, retirementInputs.cashAmount]);
 
   useEffect(() => {
@@ -322,6 +313,7 @@ const BitcoinChart: React.FC = () => {
       calculateRetirementStatus();
       calculateHistoricalRetirementDate();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retirementInputs, monthlySavingsInputs, currentPrice, chartData, savingsProjection]);
 
   const calculateHistoricalRetirementDate = useCallback(() => {
@@ -348,8 +340,6 @@ const BitcoinChart: React.FC = () => {
       if (dataPoint.actualPrice === null) continue;
       
       // Use total Bitcoin holdings (original + projected from monthly savings)
-      const bitcoinValue = totalBitcoinHoldings * dataPoint.actualPrice;
-      const totalAssets = bitcoinValue + retirementInputs.cashAmount;
       const year = new Date(dataPoint.date).getFullYear();
       
       // Test if they could retire at this historical point using Bear Market Test
