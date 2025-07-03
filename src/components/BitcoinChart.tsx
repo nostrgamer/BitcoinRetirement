@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   LineChart,
   Line,
@@ -11,7 +11,7 @@ import {
 } from 'recharts';
 import { BitcoinAPI } from '../services/BitcoinAPI';
 import { BitcoinPowerLaw } from '../models/PowerLaw';
-import { ChartDataPoint, RetirementInputs, RetirementStatus, PowerLawMetrics, MonthlySavingsInputs, SavingsProjection } from '../types/Bitcoin';
+import { ChartDataPoint, RetirementInputs, RetirementStatus, MonthlySavingsInputs, SavingsProjection } from '../types/Bitcoin';
 
 const BitcoinChart: React.FC = () => {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
@@ -161,7 +161,7 @@ const BitcoinChart: React.FC = () => {
     }
   };
 
-  const calculateMonthlySavingsProjection = () => {
+  const calculateMonthlySavingsProjection = useCallback(() => {
     if (!monthlySavingsInputs.enabled || monthlySavingsInputs.monthlySavingsAmount <= 0 || monthlySavingsInputs.yearsToRetirement <= 0) {
       return [];
     }
@@ -226,14 +226,14 @@ const BitcoinChart: React.FC = () => {
     }
 
     return projection;
-  };
+  }, [monthlySavingsInputs.enabled, monthlySavingsInputs.monthlySavingsAmount, monthlySavingsInputs.yearsToRetirement, monthlySavingsInputs.doubleDownInBearMarkets]);
 
   // Memoize the monthly savings projection calculation
   const savingsProjection = useMemo(() => {
     return calculateMonthlySavingsProjection();
-  }, [monthlySavingsInputs.enabled, monthlySavingsInputs.monthlySavingsAmount, monthlySavingsInputs.yearsToRetirement, monthlySavingsInputs.doubleDownInBearMarkets]);
+  }, [calculateMonthlySavingsProjection]);
 
-  const calculateRetirementStatus = () => {
+  const calculateRetirementStatus = useCallback(() => {
     if (!currentPrice) return;
 
     // Use memoized monthly savings projection
@@ -284,7 +284,7 @@ const BitcoinChart: React.FC = () => {
       riskLevel: 'Bear Market Test Based',
       powerLawMetrics: undefined
     });
-  };
+  }, [currentPrice, savingsProjection, monthlySavingsInputs.enabled, monthlySavingsInputs.yearsToRetirement, retirementInputs.bitcoinAmount, retirementInputs.annualWithdrawal, retirementInputs.cashAmount]);
 
   useEffect(() => {
     if (currentPrice && chartData.length > 0) {
@@ -293,7 +293,7 @@ const BitcoinChart: React.FC = () => {
     }
   }, [retirementInputs, monthlySavingsInputs, currentPrice, chartData, savingsProjection]);
 
-  const calculateHistoricalRetirementDate = () => {
+  const calculateHistoricalRetirementDate = useCallback(() => {
     // Only calculate if we have withdrawal needs and either starting Bitcoin OR monthly savings plan
     const hasAssets = retirementInputs.bitcoinAmount > 0 || (monthlySavingsInputs.enabled && monthlySavingsInputs.monthlySavingsAmount > 0);
     if (!currentPrice || chartData.length === 0 || !hasAssets || retirementInputs.annualWithdrawal <= 0) {
@@ -344,7 +344,7 @@ const BitcoinChart: React.FC = () => {
     // If no historical date found where they could retire
     setHistoricalRetirementDate(null);
     console.log('No historical retirement date found - Bear Market Test failed for all historical prices');
-  };
+  }, [currentPrice, chartData, retirementInputs.bitcoinAmount, monthlySavingsInputs.enabled, monthlySavingsInputs.monthlySavingsAmount, retirementInputs.annualWithdrawal, savingsProjection, retirementInputs.cashAmount]);
 
   const testBearMarketSurvival = (bitcoinPrice: number, year: number, bitcoinHoldings: number, annualWithdrawal: number, cashHoldings: number = 0) => {
     if (bitcoinHoldings <= 0 || annualWithdrawal <= 0) return { passes: false };
@@ -636,7 +636,6 @@ const BitcoinChart: React.FC = () => {
       let withdrawalSource = '';
       let cashUsed = 0;
       let bitcoinSold = 0;
-      let bitcoinPrice_atSale = bitcoinPrice;
       
       // Determine actual withdrawal amount for this year
       let actualWithdrawal = annualWithdrawal;
