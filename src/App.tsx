@@ -7,7 +7,6 @@ function App() {
     <div className="App">
       <header className="App-header">
         <h1>Bitcoin Retirement Calculator</h1>
-        <p>Bitcoin Price vs Power Law Analysis</p>
       </header>
       <main>
         <BitcoinChart />

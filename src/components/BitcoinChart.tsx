@@ -179,10 +179,10 @@ const BitcoinChart: React.FC = () => {
         currentMonthlySavings *= 1.04; // 4% annual wage growth
       }
 
-      // Determine if this year is a bear market (every 4th year starting from year 3)
-      // Align with simulation cycles: year 3, 7, 11, etc. are bear markets
-      const cycleYear = year % 4;
-      const isBearMarketYear = cycleYear === 3;
+      // Determine if this year is a bear market using realistic cycle model
+      // Bear market: first 2 years of each 4-year cycle
+      const cycleYear = year % 4; // 0, 1, 2, 3 within each 4-year cycle
+      const isBearMarketYear = cycleYear === 0 || cycleYear === 1; // Bear market in years 0 and 1
       
       for (let month = 0; month < 12; month++) {
         const projectionDate = new Date(startDate);
@@ -200,7 +200,7 @@ const BitcoinChart: React.FC = () => {
           // Debug logging for bear market doubling
           if (month === 0) { // Only log once per year
             console.log(`MONTHLY SAVINGS DEBUG - Year ${year + 1} (${new Date().getFullYear() + year}):
-              Cycle Year: ${cycleYear}
+              Cycle Year: ${cycleYear} (of 4-year cycle)
               Is Bear Market: ${isBearMarketYear}
               Base Monthly Amount: $${Math.round(currentMonthlySavings)}
               Doubled Monthly Amount: $${Math.round(actualMonthlySavings)}
@@ -349,7 +349,7 @@ const BitcoinChart: React.FC = () => {
   const testBearMarketSurvival = (bitcoinPrice: number, year: number, bitcoinHoldings: number, annualWithdrawal: number, cashHoldings: number = 0) => {
     if (bitcoinHoldings <= 0 || annualWithdrawal <= 0) return { passes: false };
     
-    // Bear Market Test: 60% crash for 1 year, then gradual recovery over 2 years
+    // Bear Market Test: Realistic 24-month bear market based on historical cycles
     // Strategy: Use cash during bear market to preserve Bitcoin
     
     let remainingBitcoin = bitcoinHoldings;
@@ -357,10 +357,10 @@ const BitcoinChart: React.FC = () => {
     
     const targetDate = new Date(year, 0, 1);
     const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
-    
-    // Year 1: Use standard Power Law floor for crash scenario
     const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
-    const crashPrice = floorValue; // Use standard Power Law floor
+    
+    // Year 1: Deep bear market at Power Law floor (first 12 months)
+    const deepBearPrice = floorValue;
     
     // Smart strategy: Use cash first during the crash
     if (remainingCash >= annualWithdrawal) {
@@ -370,20 +370,20 @@ const BitcoinChart: React.FC = () => {
       // Use all remaining cash, then sell Bitcoin for the rest
       const remainingNeeded = annualWithdrawal - remainingCash;
       remainingCash = 0;
-      const bitcoinToSell = remainingNeeded / crashPrice;
+      const bitcoinToSell = remainingNeeded / deepBearPrice;
       remainingBitcoin -= bitcoinToSell;
       
       if (remainingBitcoin < 0) return { passes: false }; // Ran out of Bitcoin in year 1
     }
     
-    // Year 2: Recovery year - gradual recovery using standard Power Law floor
-    const recoveryPrice = (floorValue + fairValue) / 2; // Halfway between floor and fair value
+    // Year 2: Bear market recovery (second 12 months) - price between floor and fair value
+    const bearRecoveryPrice = floorValue + (fairValue - floorValue) * 0.75; // 75% of way to fair value
     if (remainingCash >= annualWithdrawal) {
       remainingCash -= annualWithdrawal;
     } else {
       const remainingNeeded = annualWithdrawal - remainingCash;
       remainingCash = 0;
-      const bitcoinToSell = remainingNeeded / recoveryPrice;
+      const bitcoinToSell = remainingNeeded / bearRecoveryPrice;
       remainingBitcoin -= bitcoinToSell;
       
       if (remainingBitcoin < 0) return { passes: false }; // Ran out of Bitcoin in year 2
@@ -420,8 +420,6 @@ const BitcoinChart: React.FC = () => {
     }));
   };
 
-
-
   const formatPrice = (value: number): string => {
     if (value >= 1000000) {
       return `$${(value / 1000000).toFixed(2)}M`;
@@ -439,8 +437,6 @@ const BitcoinChart: React.FC = () => {
       day: 'numeric'
     });
   };
-
-
 
   const simulate50YearWithdrawals = () => {
     // Only simulate if we have withdrawal needs and either starting Bitcoin OR monthly savings plan
@@ -491,9 +487,12 @@ const BitcoinChart: React.FC = () => {
         if (yearData) {
           cumulativeCashInvested += yearData.cashInvested;
           
-          // Simple 4-year cycles using standard Power Law bands
-          const cycleYear = year % 4;
-          const isBearMarketYear = cycleYear === 3;
+          // Realistic Bitcoin cycles based on historical data:
+          // 4-year cycles with proper phase distribution
+          // Bear market: ~2 years, Bull market: ~1.5 years, Correction: ~0.5 years
+          
+          const cycleYear = year % 4; // 0, 1, 2, 3 within each 4-year cycle
+          const isBearMarketYear = cycleYear === 0 || cycleYear === 1; // Bear market in years 0 and 1
           const cycleDate = new Date(simulationYear, 0, 1);
           const floorValue = BitcoinPowerLaw.calculateFloorPrice(cycleDate);
           const upperBound = BitcoinPowerLaw.calculateUpperBound(cycleDate);
@@ -501,21 +500,21 @@ const BitcoinChart: React.FC = () => {
           let cyclePhase = '';
           
           switch (cycleYear) {
-            case 0: // Recovery year - between floor and fair
-              cyclePrice = (floorValue + bitcoinFairValue) / 2;
-              cyclePhase = 'Recovery';
-              break;
-            case 1: // Bull run - between fair and upper bound
-              cyclePrice = (bitcoinFairValue + upperBound) / 2;
-              cyclePhase = 'Bull';
-              break;
-            case 2: // Peak/correction - back to fair value
-              cyclePrice = bitcoinFairValue;
-              cyclePhase = 'Peak/Correction';
-              break;
-            case 3: // Bear market - drop to Power Law floor
+            case 0: // Year 1 of cycle: Deep bear market at floor
               cyclePrice = floorValue;
-              cyclePhase = 'Bear (Power Law Floor)';
+              cyclePhase = 'Deep Bear (Floor)';
+              break;
+            case 1: // Year 2 of cycle: Bear market recovery
+              cyclePrice = floorValue + (bitcoinFairValue - floorValue) * 0.75;
+              cyclePhase = 'Bear Market Recovery';
+              break;
+            case 2: // Year 3 of cycle: Bull market
+              cyclePrice = bitcoinFairValue + (upperBound - bitcoinFairValue) * 0.7;
+              cyclePhase = 'Bull Market';
+              break;
+            case 3: // Year 4 of cycle: Bull peak and correction
+              cyclePrice = bitcoinFairValue + (upperBound - bitcoinFairValue) * 0.3;
+              cyclePhase = 'Bull Peak & Correction';
               break;
             default:
               cyclePrice = bitcoinFairValue;
@@ -527,7 +526,7 @@ const BitcoinChart: React.FC = () => {
             console.log(`🐻 BEAR MARKET DEBUG - Year ${simulationYear}:
               Year Data Cash Invested: $${yearData.cashInvested.toLocaleString()}
               Year Data Bitcoin Purchased: ${yearData.bitcoinPurchased.toFixed(6)} BTC
-              Cycle Year: ${cycleYear}
+              Cycle Year: ${cycleYear} (of 4-year cycle)
               Bitcoin Fair Value: $${bitcoinFairValue.toLocaleString()}
               Cycle Price: $${cyclePrice.toLocaleString()}
               Expected Bitcoin (cash/price): ${(yearData.cashInvested / cyclePrice).toFixed(6)} BTC
@@ -601,27 +600,30 @@ const BitcoinChart: React.FC = () => {
         bitcoinPrice = fairValue;
         cyclePhase = 'Retirement Start (Fair Value)';
       } else {
-        // Simple 4-year cycles using standard Power Law bands
-        const adjustedCycleYear = (year - 1) % 4;
+        // Realistic Bitcoin cycles based on historical data:
+        // 4-year cycles with proper phase distribution
+        // Bear market: ~2 years, Bull market: ~1.5 years, Correction: ~0.5 years
+        
+        const cycleYear = (year - 1) % 4; // 0, 1, 2, 3 within each 4-year cycle
         const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
         const upperBound = BitcoinPowerLaw.calculateUpperBound(targetDate);
         
-        switch (adjustedCycleYear) {
-          case 0: // Bear market - drop to Power Law floor
+        switch (cycleYear) {
+          case 0: // Year 1 of cycle: Deep bear market at floor
             bitcoinPrice = floorValue;
-            cyclePhase = 'Bear (Power Law Floor)';
+            cyclePhase = 'Deep Bear (Floor)';
             break;
-          case 1: // Recovery year - between floor and fair
-            bitcoinPrice = (floorValue + fairValue) / 2;
-            cyclePhase = 'Recovery';
+          case 1: // Year 2 of cycle: Bear market recovery
+            bitcoinPrice = floorValue + (fairValue - floorValue) * 0.75;
+            cyclePhase = 'Bear Market Recovery';
             break;
-          case 2: // Bull run - between fair and upper bound
-            bitcoinPrice = (fairValue + upperBound) / 2;
-            cyclePhase = 'Bull';
+          case 2: // Year 3 of cycle: Bull market
+            bitcoinPrice = fairValue + (upperBound - fairValue) * 0.7;
+            cyclePhase = 'Bull Market';
             break;
-          case 3: // Peak/correction - at fair value
-            bitcoinPrice = fairValue;
-            cyclePhase = 'Peak/Correction';
+          case 3: // Year 4 of cycle: Bull peak and correction
+            bitcoinPrice = fairValue + (upperBound - fairValue) * 0.3;
+            cyclePhase = 'Bull Peak & Correction';
             break;
           default:
             bitcoinPrice = fairValue;
@@ -782,7 +784,7 @@ const BitcoinChart: React.FC = () => {
   return (
     <div className="chart-container">
       <div className="chart-header">
-        <h2>Bitcoin Price vs Power Law Model</h2>
+        <h2>Bitcoin Price and Power Law Model</h2>
         {lastUpdated && (
           <div style={{ 
             fontSize: '12px', 
@@ -830,6 +832,76 @@ const BitcoinChart: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Chart moved before inputs */}
+      <div className="chart-wrapper">
+        <ResponsiveContainer width="100%" height={700}>
+          <LineChart data={chartData} margin={{ top: 20, right: 30, left: 60, bottom: 40 }}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="timestamp"
+              type="number"
+              scale="time"
+              domain={['dataMin', 'dataMax']}
+              tickFormatter={(timestamp) => {
+                const date = new Date(timestamp);
+                return date.getFullYear().toString();
+              }}
+              angle={-45}
+              textAnchor="end"
+              height={80}
+              tick={{ fontSize: 12 }}
+            />
+            <YAxis 
+              scale="log"
+              domain={['dataMin', 'dataMax']} // Dynamic range to accommodate future projections
+              tickFormatter={formatPrice}
+              tick={{ fontSize: 12 }}
+              width={60}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
+            <Line
+              type="monotone"
+              dataKey="actualPrice"
+              stroke="#f7931a"
+              strokeWidth={2}
+              dot={false}
+              connectNulls={false}
+              name="Actual Bitcoin Price"
+            />
+            <Line
+              type="monotone"
+              dataKey="powerLawPrice"
+              stroke="#2196f3"
+              strokeWidth={2}
+              dot={false}
+              strokeDasharray="5 5"
+              name="Power Law Fair Value"
+            />
+            <Line
+              type="monotone"
+              dataKey="powerLawFloor"
+              stroke="#4caf50"
+              strokeWidth={2}
+              dot={false}
+              strokeDasharray="3 3"
+              name="Power Law Floor (0.42x)"
+            />
+            <Line
+              type="monotone"
+              dataKey="powerLawUpperBound"
+              stroke="#ff5722"
+              strokeWidth={2}
+              dot={false}
+              strokeDasharray="7 3"
+              name="Power Law Upper Bound (2x)"
+            />
+            
+
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
       {/* Retirement Calculator Inputs */}
@@ -986,75 +1058,6 @@ const BitcoinChart: React.FC = () => {
         </div>
 
       </div>
-      
-      <div className="chart-wrapper">
-        <ResponsiveContainer width="100%" height={700}>
-          <LineChart data={chartData} margin={{ top: 20, right: 30, left: 60, bottom: 100 }}>
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="timestamp"
-              type="number"
-              scale="time"
-              domain={['dataMin', 'dataMax']}
-              tickFormatter={(timestamp) => {
-                const date = new Date(timestamp);
-                return date.getFullYear().toString();
-              }}
-              angle={-45}
-              textAnchor="end"
-              height={80}
-              tick={{ fontSize: 12 }}
-            />
-            <YAxis 
-              scale="log"
-              domain={['dataMin', 'dataMax']} // Dynamic range to accommodate future projections
-              tickFormatter={formatPrice}
-              tick={{ fontSize: 12 }}
-              width={60}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Line
-              type="monotone"
-              dataKey="actualPrice"
-              stroke="#f7931a"
-              strokeWidth={2}
-              dot={false}
-              connectNulls={false}
-              name="Actual Bitcoin Price"
-            />
-            <Line
-              type="monotone"
-              dataKey="powerLawPrice"
-              stroke="#2196f3"
-              strokeWidth={2}
-              dot={false}
-              strokeDasharray="5 5"
-              name="Power Law Fair Value"
-            />
-            <Line
-              type="monotone"
-              dataKey="powerLawFloor"
-              stroke="#4caf50"
-              strokeWidth={2}
-              dot={false}
-              strokeDasharray="3 3"
-              name="Power Law Floor (0.42x)"
-            />
-            <Line
-              type="monotone"
-              dataKey="powerLawUpperBound"
-              stroke="#ff5722"
-              strokeWidth={2}
-              dot={false}
-              strokeDasharray="7 3"
-              name="Power Law Upper Bound (2x)"
-            />
-            
-
-          </LineChart>
-        </ResponsiveContainer>
-      </div>
 
       {/* Retirement Analysis - based on 50-year simulation */}
       {(() => {
@@ -1077,20 +1080,6 @@ const BitcoinChart: React.FC = () => {
               </div>
             </div>
             
-            <div style={{ 
-              padding: '15px',
-              background: 'rgba(247, 147, 26, 0.1)',
-              border: '1px solid rgba(247, 147, 26, 0.3)',
-              borderRadius: '8px',
-              marginBottom: '20px',
-              textAlign: 'center'
-            }}>
-              <p style={{ margin: 0, color: '#e8e8e8', fontSize: '0.9rem' }}>
-                <strong>Strategy:</strong> Use cash during bear markets to preserve Bitcoin, sell Bitcoin during bull markets. 
-                Analysis based on 50-year simulation with realistic Bitcoin cycles and inflation.
-              </p>
-            </div>
-
             {/* Historical Retirement Information */}
             {historicalRetirementDate && (
               <div className="historical-retirement-info">
