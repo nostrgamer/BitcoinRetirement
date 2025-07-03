@@ -74,13 +74,32 @@ export class BitcoinAPI {
         if (csvData.length > 0) {
           console.log(`Loaded ${csvData.length} data points from CSV (${csvData[0]?.date} to ${csvData[csvData.length - 1]?.date})`);
           
-          // Check if CSV data is recent (within 7 days)
+          // Always supplement with recent API data to ensure we have the latest price
           const latestCsvDate = new Date(csvData[csvData.length - 1].date);
           const today = new Date();
           const daysSinceLastData = Math.floor((today.getTime() - latestCsvDate.getTime()) / (1000 * 60 * 60 * 24));
           
-          if (daysSinceLastData <= 7) {
-            console.log(`CSV data is current (${daysSinceLastData} days old)`);
+          if (daysSinceLastData <= 1) {
+            console.log(`CSV data is very current (${daysSinceLastData} days old), but will still check for today's data`);
+            // Always try to get today's data even if CSV is very recent
+            try {
+              const todayData = await this.getHistoricalPrices(3); // Get last 3 days to ensure we have today
+              
+              // Add only data that's newer than CSV
+              const newerData = todayData.filter(apiPoint => 
+                new Date(apiPoint.date).getTime() > latestCsvDate.getTime()
+              );
+              
+              if (newerData.length > 0) {
+                console.log(`Found ${newerData.length} newer data points from API`);
+                const combinedData = [...csvData, ...newerData];
+                combinedData.sort((a, b) => a.timestamp - b.timestamp);
+                return combinedData;
+              }
+            } catch (apiError) {
+              console.log('Failed to get today\'s data from API, using CSV only');
+            }
+            
             return csvData;
           }
           
