@@ -7,9 +7,7 @@ import {
   CartesianGrid,
   Tooltip,
   Legend,
-  ResponsiveContainer,
-  ReferenceDot,
-  ReferenceLine
+  ResponsiveContainer
 } from 'recharts';
 import { BitcoinAPI } from '../services/BitcoinAPI';
 import { BitcoinPowerLaw } from '../models/PowerLaw';
@@ -180,9 +178,9 @@ const BitcoinChart: React.FC = () => {
 
     // Calculate for each month over the specified years
     for (let year = 0; year < monthlySavingsInputs.yearsToRetirement; year++) {
-      // Apply 8% inflation at the start of each year
+      // Apply 4% wage growth at the start of each year (official inflation rate)
       if (year > 0) {
-        currentMonthlySavings *= 1.08; // 8% real inflation
+        currentMonthlySavings *= 1.04; // 4% annual wage growth
       }
 
       // Determine if this year is a bear market (every 4th year starting from year 3)
@@ -305,12 +303,12 @@ const BitcoinChart: React.FC = () => {
       
       IMPORTANT: Cash is NOT sustainable annual income - it depletes if used!`);
      
-    // Test if withdrawal amount passes Bear Market Test at retirement date
-    const inflationAdjustedWithdrawal = retirementInputs.annualWithdrawal * Math.pow(1.08, yearsToRetirement);
-    const bearMarketTestResult = testBearMarketSurvival(bitcoinPriceAtRetirement, evaluationYear, totalBitcoinHoldings, inflationAdjustedWithdrawal, retirementInputs.cashAmount);
+         // Test if withdrawal amount passes Bear Market Test at retirement date
+    // Using the original withdrawal amount (not inflation-adjusted)
+    const bearMarketTestResult = testBearMarketSurvival(bitcoinPriceAtRetirement, evaluationYear, totalBitcoinHoldings, retirementInputs.annualWithdrawal, retirementInputs.cashAmount);
     
     // Check if we can retire: Either sustainable withdrawal covers needs, OR Bear Market Test passes with cash strategy
-    const canRetireWithSustainableIncome = sustainableAnnualWithdrawal >= inflationAdjustedWithdrawal;
+    const canRetireWithSustainableIncome = sustainableAnnualWithdrawal >= retirementInputs.annualWithdrawal;
     const canRetireWithBearMarketStrategy = bearMarketTestResult.passes;
     
     // Smart retirement strategy simulation
@@ -335,7 +333,9 @@ const BitcoinChart: React.FC = () => {
   }, [retirementInputs, monthlySavingsInputs, currentPrice, chartData, savingsProjection]);
 
   const calculateHistoricalRetirementDate = () => {
-    if (!currentPrice || chartData.length === 0 || retirementInputs.bitcoinAmount <= 0 || retirementInputs.annualWithdrawal <= 0) {
+    // Only calculate if we have withdrawal needs and either starting Bitcoin OR monthly savings plan
+    const hasAssets = retirementInputs.bitcoinAmount > 0 || (monthlySavingsInputs.enabled && monthlySavingsInputs.monthlySavingsAmount > 0);
+    if (!currentPrice || chartData.length === 0 || !hasAssets || retirementInputs.annualWithdrawal <= 0) {
       setHistoricalRetirementDate(null);
       return;
     }
@@ -485,10 +485,8 @@ const BitcoinChart: React.FC = () => {
       const year4FairValue = BitcoinPowerLaw.calculateFairValue(year4Date);
       const rawPowerLawGrowthRate = (year4FairValue - year3FairValue) / year3FairValue;
       
-      // Apply Saylor's terminal rate floor: Bitcoin should grow at least inflation + 8%
-      const inflationRate = 0.08;
-      const saylorTerminalRate = inflationRate + 0.08; // 16% minimum growth
-      const powerLawGrowthRate = Math.max(rawPowerLawGrowthRate, saylorTerminalRate);
+      // Use raw Power Law growth rate as designed (no artificial floors)
+      const powerLawGrowthRate = rawPowerLawGrowthRate;
       
       // Use 70% of Power Law growth rate as sustainable withdrawal rate on Bitcoin portion
       const sustainableWithdrawalRate = powerLawGrowthRate * 0.7;
@@ -589,16 +587,12 @@ const BitcoinChart: React.FC = () => {
     const nextYearFairValue = BitcoinPowerLaw.calculateFairValue(nextYearDate);
     const rawPowerLawGrowthRate = (nextYearFairValue - currentFairValue) / currentFairValue;
     
-    // Apply Saylor's terminal rate floor: Bitcoin should grow at least inflation + 8%
-    // With 8% inflation, this means minimum 16% annual growth (8% inflation + 8% real return)
-    const inflationRate = 0.08;
-    const saylorTerminalRate = inflationRate + 0.08; // 16% minimum growth
-    const powerLawGrowthRate = Math.max(rawPowerLawGrowthRate, saylorTerminalRate);
+    // Use raw Power Law growth rate as designed (no artificial floors)
+    const powerLawGrowthRate = rawPowerLawGrowthRate;
     
-    // Apply 70% safety factor and cap at 15% maximum (but not below Saylor's floor)
+    // Apply 70% safety factor and cap at 15% maximum
     const uncappedBitcoinSWR = powerLawGrowthRate * 0.7;
-    const saylorFloorSWR = saylorTerminalRate * 0.7; // 11.2% minimum SWR
-    const bitcoinSWR = Math.max(Math.min(uncappedBitcoinSWR, 0.15), saylorFloorSWR); // Between Saylor floor and 15% cap
+    const bitcoinSWR = Math.min(uncappedBitcoinSWR, 0.15); // Cap at 15% maximum
     
     // Debug logging
     console.log(`📊 SWR Calculation Debug for ${year}:
@@ -606,10 +600,8 @@ const BitcoinChart: React.FC = () => {
       Current Fair Value: $${currentFairValue.toLocaleString()}
       Next Year Fair Value: $${nextYearFairValue.toLocaleString()}
       Raw Power Law Growth Rate: ${(rawPowerLawGrowthRate * 100).toFixed(1)}%
-      Saylor Terminal Rate Floor: ${(saylorTerminalRate * 100).toFixed(1)}%
-      Adjusted Growth Rate: ${(powerLawGrowthRate * 100).toFixed(1)}%
+      Power Law Growth Rate: ${(powerLawGrowthRate * 100).toFixed(1)}%
       70% Safety Factor: ${(uncappedBitcoinSWR * 100).toFixed(1)}%
-      Saylor Floor SWR: ${(saylorFloorSWR * 100).toFixed(1)}%
       Final Bitcoin SWR: ${(bitcoinSWR * 100).toFixed(1)}%
       Fair Value Ratio: ${fairValueRatio.toFixed(2)}x
       Risk Level: ${riskLevel}`)
@@ -679,10 +671,8 @@ const BitcoinChart: React.FC = () => {
     const nextYearFairValue = BitcoinPowerLaw.calculateFairValue(nextYearDate);
     const rawPowerLawGrowthRate = (nextYearFairValue - currentFairValue) / currentFairValue;
     
-    // Apply Saylor's terminal rate floor: Bitcoin should grow at least inflation + 8%
-    const inflationRate = 0.08;
-    const saylorTerminalRate = inflationRate + 0.08; // 16% minimum growth
-    const powerLawGrowthRate = Math.max(rawPowerLawGrowthRate, saylorTerminalRate);
+          // Use raw Power Law growth rate as designed (no artificial floors)
+      const powerLawGrowthRate = rawPowerLawGrowthRate;
     const conservativeSWR = powerLawGrowthRate * 0.7; // 70% of growth rate for safety
     
     const remainingBitcoinValue = remainingBitcoin * sustainablePrice;
@@ -953,7 +943,9 @@ const BitcoinChart: React.FC = () => {
   };
 
   const simulate50YearWithdrawals = () => {
-    if (!currentPrice || retirementInputs.bitcoinAmount <= 0 || retirementInputs.annualWithdrawal <= 0) {
+    // Only simulate if we have withdrawal needs and either starting Bitcoin OR monthly savings plan
+    const hasAssets = retirementInputs.bitcoinAmount > 0 || (monthlySavingsInputs.enabled && monthlySavingsInputs.monthlySavingsAmount > 0);
+    if (!currentPrice || !hasAssets || retirementInputs.annualWithdrawal <= 0) {
       return [];
     }
 
@@ -1095,10 +1087,9 @@ const BitcoinChart: React.FC = () => {
       const currentSimulationYear = retirementStartYear + year;
       const targetDate = new Date(currentSimulationYear, 0, 1);
       
-      // Adjust withdrawal for inflation from TODAY to the simulation year
-      // This accounts for inflation during the savings period + retirement period
-      const totalYearsFromToday = yearsToRetirement + year;
-      const annualWithdrawal = baseAnnualWithdrawal * Math.pow(1 + inflationRate, totalYearsFromToday);
+      // Use the original withdrawal amount (not inflation-adjusted)
+      // The Power Law model operates in its original context
+      const annualWithdrawal = baseAnnualWithdrawal;
       
       // Calculate Bitcoin fair value
       const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
@@ -1296,23 +1287,6 @@ const BitcoinChart: React.FC = () => {
     <div className="chart-container">
       <div className="chart-header">
         <h2>Bitcoin Price vs Power Law Model</h2>
-        <button 
-          onClick={loadChartData} 
-          className="refresh-button"
-          disabled={loading}
-          style={{
-            background: '#f7931a',
-            color: 'white',
-            border: 'none',
-            padding: '8px 16px',
-            borderRadius: '4px',
-            cursor: loading ? 'not-allowed' : 'pointer',
-            marginBottom: '10px',
-            fontSize: '14px'
-          }}
-        >
-          {loading ? '🔄 Refreshing...' : '🔄 Refresh Data'}
-        </button>
         {lastUpdated && (
           <div style={{ 
             fontSize: '12px', 
@@ -1367,8 +1341,9 @@ const BitcoinChart: React.FC = () => {
         <h3>🏠 Smart Bitcoin Retirement Calculator</h3>
         <div className="strategy-explanation">
           <p>📈 <strong>Smart Strategy:</strong> Use cash when Bitcoin is below fair value (preserve Bitcoin), sell Bitcoin when above fair value (take profits). 
-          <br/><strong>50-Year Simulator:</strong> Models realistic 4-year Bitcoin cycles with bear markets, recovery, and bull phases plus 8% annual inflation.
-          <br/><strong>Real Test:</strong> Shows exact year-by-year withdrawals, asset depletion risks, and whether your retirement actually survives 50 years.</p>
+          <br/><strong>50-Year Simulator:</strong> Models realistic 4-year Bitcoin cycles with bear markets, recovery, and bull phases. Cash loses value to inflation.
+          <br/><strong>Real Test:</strong> Shows exact year-by-year withdrawals, asset depletion risks, and whether your retirement actually survives 50 years.
+          <br/><strong>Starting from Zero:</strong> Enter 0 BTC if you're just beginning your stacking journey - monthly savings will build your stack!</p>
         </div>
         <div className="retirement-inputs">
           <div className="input-group">
@@ -1380,7 +1355,7 @@ const BitcoinChart: React.FC = () => {
               onChange={(e) => handleInputChange('bitcoinAmount', parseFloat(e.target.value) || 0)}
               step="0.01"
               min="0"
-              placeholder="Enter BTC amount"
+              placeholder="0 (if just starting)"
             />
             <span className="input-unit">BTC</span>
           </div>
@@ -1431,7 +1406,7 @@ const BitcoinChart: React.FC = () => {
           {monthlySavingsInputs.enabled && (
             <>
               <div className="savings-explanation">
-                <p>📈 <strong>Assumptions:</strong> Monthly savings increase 8% annually (real inflation). Bitcoin purchases at Power Law fair value each month (harder to earn sats over time).</p>
+                <p>📈 <strong>Assumptions:</strong> Monthly savings increase 4% annually (official inflation/wage growth). Bitcoin purchases at Power Law fair value each month (harder to earn sats over time).</p>
               </div>
               
               <div className="savings-inputs">
@@ -1592,79 +1567,16 @@ const BitcoinChart: React.FC = () => {
               name="Power Law Upper Bound (2x)"
             />
             
-            {/* Planned Retirement Date Indicator - based on monthly savings timeline */}
-            {monthlySavingsInputs.enabled && monthlySavingsInputs.yearsToRetirement > 0 && (() => {
-              const currentYear = new Date().getFullYear();
-              const retirementYear = currentYear + monthlySavingsInputs.yearsToRetirement;
-              const retirementDate = new Date(retirementYear, 0, 1);
-              const retirementTimestamp = retirementDate.getTime();
-              const retirementFairValue = BitcoinPowerLaw.calculateFairValue(retirementDate);
-              
-              return (
-                <>
-                  <ReferenceLine 
-                    x={retirementTimestamp}
-                    stroke="#9c27b0"
-                    strokeWidth={3}
-                    strokeDasharray="5 5"
-                    label={{ 
-                      value: `🏠 Planned Retirement (${retirementYear})`, 
-                      position: "top",
-                      style: { 
-                        fill: "#9c27b0", 
-                        fontWeight: "bold",
-                        fontSize: "12px"
-                      }
-                    }}
-                  />
-                  <ReferenceDot
-                    x={retirementTimestamp}
-                    y={retirementFairValue}
-                    r={8}
-                    fill="#9c27b0"
-                    stroke="#fff"
-                    strokeWidth={3}
-                  />
-                </>
-              );
-            })()}
 
-            {/* Historical Retirement Date Indicator - when you could have first retired */}
-            {historicalRetirementDate && historicalRetirementDate.actualPrice && (
-              <>
-                <ReferenceLine 
-                  x={historicalRetirementDate.timestamp}
-                  stroke="#10b981"
-                  strokeWidth={3}
-                  strokeDasharray="8 3"
-                  label={{ 
-                    value: monthlySavingsInputs.enabled 
-                      ? "✨ Could Have Retired (w/ Full Plan)" 
-                      : "✨ Could Have Retired", 
-                    position: "top",
-                    style: { 
-                      fill: "#10b981", 
-                      fontWeight: "bold",
-                      fontSize: "12px"
-                    }
-                  }}
-                />
-                <ReferenceDot
-                  x={historicalRetirementDate.timestamp}
-                  y={historicalRetirementDate.actualPrice}
-                  r={8}
-                  fill="#10b981"
-                  stroke="#fff"
-                  strokeWidth={3}
-                />
-              </>
-            )}
           </LineChart>
         </ResponsiveContainer>
       </div>
 
       {/* Retirement Analysis - based on 50-year simulation */}
-      {retirementInputs.bitcoinAmount > 0 && retirementInputs.annualWithdrawal > 0 && currentPrice && (() => {
+      {(() => {
+        const hasAssets = retirementInputs.bitcoinAmount > 0 || (monthlySavingsInputs.enabled && monthlySavingsInputs.monthlySavingsAmount > 0);
+        return hasAssets && retirementInputs.annualWithdrawal > 0 && currentPrice !== null;
+      })() && currentPrice && (() => {
         const simulation = simulate50YearWithdrawals();
         if (simulation.length === 0) return null;
         
@@ -1706,22 +1618,24 @@ const BitcoinChart: React.FC = () => {
                     day: 'numeric' 
                   })} when Bitcoin was ${formatPrice(historicalRetirementDate.actualPrice || 0)} 📈
                   {monthlySavingsInputs.enabled && (
-                    <><br/><em>(This calculation includes your full savings plan: current {retirementInputs.bitcoinAmount.toFixed(3)} BTC + projected {savingsProjection.length > 0 ? savingsProjection[savingsProjection.length - 1].totalBitcoinAccumulated.toFixed(3) : '0'} BTC from monthly savings)</em></>
+                    <><br/><em>(This calculation includes your full savings plan: {retirementInputs.bitcoinAmount > 0 ? `current ${retirementInputs.bitcoinAmount.toFixed(3)} BTC + ` : ''}projected {savingsProjection.length > 0 ? savingsProjection[savingsProjection.length - 1].totalBitcoinAccumulated.toFixed(3) : '0'} BTC from monthly savings)</em></>
                   )}
                 </p>
-                <p className="chart-note">Look for the green ✨ line and dot on the chart above!</p>
+
               </div>
             )}
 
             <div className="status-details">
               <div className="asset-breakdown">
-                <div className="asset-item">
-                  <span className="asset-label">Current Bitcoin Holdings:</span>
-                  <span className="asset-value">
-                    {formatPrice(retirementInputs.bitcoinAmount * currentPrice)}
-                    <small> ({retirementInputs.bitcoinAmount.toFixed(3)} BTC × {formatPrice(currentPrice)})</small>
-                  </span>
-                </div>
+                {retirementInputs.bitcoinAmount > 0 && (
+                  <div className="asset-item">
+                    <span className="asset-label">Current Bitcoin Holdings:</span>
+                    <span className="asset-value">
+                      {formatPrice(retirementInputs.bitcoinAmount * currentPrice)}
+                      <small> ({retirementInputs.bitcoinAmount.toFixed(3)} BTC × {formatPrice(currentPrice)})</small>
+                    </span>
+                  </div>
+                )}
                 {monthlySavingsInputs.enabled && savingsProjection.length > 0 && (() => {
                   const currentYear = new Date().getFullYear();
                   const retirementYear = currentYear + monthlySavingsInputs.yearsToRetirement;
@@ -1777,7 +1691,7 @@ const BitcoinChart: React.FC = () => {
                 <div className="already-retired">
                   <div className="celebration-message">
                     <h4>🎉 Congratulations! {monthlySavingsInputs.enabled ? `You can retire in ${monthlySavingsInputs.yearsToRetirement} year${monthlySavingsInputs.yearsToRetirement === 1 ? '' : 's'}!` : 'You can retire today!'}</h4>
-                    <p>The 50-year simulation confirms your assets will sustain your retirement with realistic Bitcoin cycles and inflation{monthlySavingsInputs.enabled ? ` starting ${new Date().getFullYear() + monthlySavingsInputs.yearsToRetirement}` : ''}!</p>
+                    <p>The 50-year simulation confirms your assets will sustain your retirement with realistic Bitcoin cycles{monthlySavingsInputs.enabled ? ` starting ${new Date().getFullYear() + monthlySavingsInputs.yearsToRetirement}` : ''}!</p>
                   </div>
                   <div className="current-status">
                                           <div className="projection-item">
@@ -1798,7 +1712,7 @@ const BitcoinChart: React.FC = () => {
               ) : (
                 <div className="projected-retirement">
                   <p className="projection-note">
-                    Your current assets won't sustain 50 years of withdrawals based on realistic Bitcoin cycles. Consider increasing Bitcoin holdings or reducing annual withdrawal needs. Check the detailed 50-year simulation below for exact timing.
+                    Your current assets won't sustain 50 years of withdrawals based on realistic Bitcoin cycles as modeled by the Power Law. Consider increasing Bitcoin holdings or reducing annual withdrawal needs. Check the detailed 50-year simulation below for exact timing.
                   </p>
                 </div>
               )}
@@ -1808,7 +1722,10 @@ const BitcoinChart: React.FC = () => {
       })()}
       
       {/* 50-Year Simulation Validation */}
-      {retirementInputs.bitcoinAmount > 0 && retirementInputs.annualWithdrawal > 0 && (() => {
+      {(() => {
+        const hasAssets = retirementInputs.bitcoinAmount > 0 || (monthlySavingsInputs.enabled && monthlySavingsInputs.monthlySavingsAmount > 0);
+        return hasAssets && retirementInputs.annualWithdrawal > 0;
+      })() && (() => {
         const simulation = simulate50YearWithdrawals();
         if (simulation.length === 0) return null;
         
@@ -1831,7 +1748,7 @@ const BitcoinChart: React.FC = () => {
                 ✅ 50-Year Simulation: PASSED
               </h5>
               <p style={{ color: '#f0f0f0', margin: 0 }}>
-                Comprehensive simulation confirms assets will last the full 50 years with realistic Bitcoin cycles and inflation indexing.
+                Comprehensive simulation confirms assets will last the full 50 years with realistic Bitcoin cycles as modeled by the Power Law.
               </p>
             </div>
           );
@@ -1848,7 +1765,7 @@ const BitcoinChart: React.FC = () => {
                 ⚠️ 50-Year Simulation: FAILED
               </h5>
               <p style={{ color: '#f0f0f0', marginBottom: '10px' }}>
-                <strong>Assets will be depleted in year {actualYearsLasting}</strong> when accounting for realistic Bitcoin cycles and inflation.
+                <strong>Assets will be depleted in year {actualYearsLasting}</strong> when accounting for realistic Bitcoin cycles.
               </p>
               <p style={{ color: '#f0f0f0', margin: 0 }}>
                 <strong>Action needed:</strong> {actualYearsLasting < 40 ? 
@@ -1862,7 +1779,10 @@ const BitcoinChart: React.FC = () => {
       })()}
 
       {/* 50-Year Withdrawal Projection Table */}
-      {retirementInputs.bitcoinAmount > 0 && retirementInputs.annualWithdrawal > 0 && (
+      {(() => {
+        const hasAssets = retirementInputs.bitcoinAmount > 0 || (monthlySavingsInputs.enabled && monthlySavingsInputs.monthlySavingsAmount > 0);
+        return hasAssets && retirementInputs.annualWithdrawal > 0;
+      })() && (
         <div className="retirement-projection">
           <h3 style={{ color: '#f7931a', textAlign: 'center', marginBottom: '20px' }}>
             {monthlySavingsInputs.enabled ? 'Full Life Plan: Accumulation + 50-Year Retirement' : '50-Year Withdrawal Projection'}
@@ -2066,7 +1986,7 @@ const BitcoinChart: React.FC = () => {
                     <div>
                       <strong>Strategy:</strong> Use cash during 🔴 bear markets, sell Bitcoin during 🟢 bull markets
                       <br/><strong>BTC Δ:</strong> + means buying Bitcoin, - means selling Bitcoin
-                      <br/><strong>Inflation:</strong> All amounts indexed to 8% annual inflation
+                      <br/><strong>Cash Impact:</strong> Cash loses value to inflation, but withdrawal needs stay constant
                     </div>
                   </div>
                 </div>
