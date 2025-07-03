@@ -37,6 +37,7 @@ export interface SavingsProjection {
   month: number;
   monthlySavingsAmount: number;
   bitcoinFairValue: number;
+  bitcoinCyclePrice: number;
   bitcoinPurchased: number;
   totalBitcoinAccumulated: number;
   totalCashInvested: number;

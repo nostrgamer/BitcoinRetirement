@@ -173,15 +173,14 @@ const BitcoinChart: React.FC = () => {
     let currentMonthlySavings = monthlySavingsInputs.monthlySavingsAmount;
 
     // Calculate for each month over the specified years
+    // Using Net Present Value approach - no wage growth adjustments
     for (let year = 0; year < monthlySavingsInputs.yearsToRetirement; year++) {
-      // Apply 4% wage growth at the start of each year (official inflation rate)
-      if (year > 0) {
-        currentMonthlySavings *= 1.04; // 4% annual wage growth
-      }
 
       // Determine if this year is a bear market using realistic cycle model
       // Bear market: first 2 years of each 4-year cycle
-      const cycleYear = year % 4; // 0, 1, 2, 3 within each 4-year cycle
+      // Align with actual calendar years to match withdrawal simulation
+      const actualYear = startDate.getFullYear() + year;
+      const cycleYear = (actualYear - 1) % 4; // 0, 1, 2, 3 within each 4-year cycle (same as withdrawal logic)
       const isBearMarketYear = cycleYear === 0 || cycleYear === 1; // Bear market in years 0 and 1
       
       for (let month = 0; month < 12; month++) {
@@ -192,6 +191,35 @@ const BitcoinChart: React.FC = () => {
         // Calculate Bitcoin fair value for this future date
         const bitcoinFairValue = BitcoinPowerLaw.calculateFairValue(projectionDate);
         
+        // Calculate realistic Bitcoin price based on cycle position (same logic as withdrawal simulation)
+        let bitcoinCyclePrice;
+        
+        if (year === 0) {
+          // For current year, use fair value (same as withdrawal simulation)
+          bitcoinCyclePrice = bitcoinFairValue;
+        } else {
+          // For future years, apply cycle logic
+          const floorValue = BitcoinPowerLaw.calculateFloorPrice(projectionDate);
+          const upperBound = BitcoinPowerLaw.calculateUpperBound(projectionDate);
+          
+          switch (cycleYear) {
+            case 0: // Year 1 of cycle: Deep bear market at floor
+              bitcoinCyclePrice = floorValue;
+              break;
+            case 1: // Year 2 of cycle: Bear market recovery
+              bitcoinCyclePrice = floorValue + (bitcoinFairValue - floorValue) * 0.75;
+              break;
+            case 2: // Year 3 of cycle: Bull market
+              bitcoinCyclePrice = bitcoinFairValue + (upperBound - bitcoinFairValue) * 0.7;
+              break;
+            case 3: // Year 4 of cycle: Bull peak and correction
+              bitcoinCyclePrice = bitcoinFairValue + (upperBound - bitcoinFairValue) * 0.3;
+              break;
+            default:
+              bitcoinCyclePrice = bitcoinFairValue;
+          }
+        }
+        
         // Determine actual monthly savings amount for this month
         let actualMonthlySavings = currentMonthlySavings;
         if (monthlySavingsInputs.doubleDownInBearMarkets && isBearMarketYear) {
@@ -199,17 +227,19 @@ const BitcoinChart: React.FC = () => {
           
           // Debug logging for bear market doubling
           if (month === 0) { // Only log once per year
-            console.log(`MONTHLY SAVINGS DEBUG - Year ${year + 1} (${new Date().getFullYear() + year}):
+            console.log(`MONTHLY SAVINGS DEBUG - Year ${actualYear}:
               Cycle Year: ${cycleYear} (of 4-year cycle)
               Is Bear Market: ${isBearMarketYear}
               Base Monthly Amount: $${Math.round(currentMonthlySavings)}
               Doubled Monthly Amount: $${Math.round(actualMonthlySavings)}
-              Expected Yearly Total: $${Math.round(actualMonthlySavings * 12)}`);
+              Expected Yearly Total: $${Math.round(actualMonthlySavings * 12)}
+              Bitcoin Fair Value: $${bitcoinFairValue.toLocaleString()}
+              Bitcoin Cycle Price: $${bitcoinCyclePrice.toLocaleString()}`);
           }
         }
         
-        // Calculate how much Bitcoin can be purchased with this month's savings
-        const bitcoinPurchased = actualMonthlySavings / bitcoinFairValue;
+        // Calculate how much Bitcoin can be purchased with this month's savings (using realistic cycle price)
+        const bitcoinPurchased = actualMonthlySavings / bitcoinCyclePrice;
         totalBitcoinAccumulated += bitcoinPurchased;
         totalCashInvested += actualMonthlySavings;
 
@@ -218,6 +248,7 @@ const BitcoinChart: React.FC = () => {
           month: month + 1,
           monthlySavingsAmount: actualMonthlySavings,
           bitcoinFairValue: bitcoinFairValue,
+          bitcoinCyclePrice: bitcoinCyclePrice,
           bitcoinPurchased: bitcoinPurchased,
           totalBitcoinAccumulated: totalBitcoinAccumulated,
           totalCashInvested: totalCashInvested
@@ -395,7 +426,7 @@ const BitcoinChart: React.FC = () => {
     const totalRemainingValue = remainingBitcoinValue + remainingCash;
     
     // Simple sustainability check: Can the remaining portfolio last at least 20 years?
-    // This is much simpler than complex SWR calculations
+    // This is conservative but ensures long-term retirement security
     const yearsOfRunway = totalRemainingValue / annualWithdrawal;
     const minimumYearsRequired = 20; // Must survive bear market PLUS have 20 years runway
     
@@ -491,7 +522,8 @@ const BitcoinChart: React.FC = () => {
           // 4-year cycles with proper phase distribution
           // Bear market: ~2 years, Bull market: ~1.5 years, Correction: ~0.5 years
           
-          const cycleYear = year % 4; // 0, 1, 2, 3 within each 4-year cycle
+          // Align with actual calendar years to match withdrawal simulation
+          const cycleYear = (simulationYear - 1) % 4; // 0, 1, 2, 3 within each 4-year cycle (same as withdrawal logic)
           const isBearMarketYear = cycleYear === 0 || cycleYear === 1; // Bear market in years 0 and 1
           const cycleDate = new Date(simulationYear, 0, 1);
           const floorValue = BitcoinPowerLaw.calculateFloorPrice(cycleDate);
@@ -499,37 +531,42 @@ const BitcoinChart: React.FC = () => {
           let cyclePrice;
           let cyclePhase = '';
           
-          switch (cycleYear) {
-            case 0: // Year 1 of cycle: Deep bear market at floor
-              cyclePrice = floorValue;
-              cyclePhase = 'Deep Bear (Floor)';
-              break;
-            case 1: // Year 2 of cycle: Bear market recovery
-              cyclePrice = floorValue + (bitcoinFairValue - floorValue) * 0.75;
-              cyclePhase = 'Bear Market Recovery';
-              break;
-            case 2: // Year 3 of cycle: Bull market
-              cyclePrice = bitcoinFairValue + (upperBound - bitcoinFairValue) * 0.7;
-              cyclePhase = 'Bull Market';
-              break;
-            case 3: // Year 4 of cycle: Bull peak and correction
-              cyclePrice = bitcoinFairValue + (upperBound - bitcoinFairValue) * 0.3;
-              cyclePhase = 'Bull Peak & Correction';
-              break;
-            default:
-              cyclePrice = bitcoinFairValue;
-              cyclePhase = 'Fair Value';
+          if (year === 0) {
+            // For current year (2025), use fair value (same as withdrawal simulation)
+            cyclePrice = bitcoinFairValue;
+            cyclePhase = 'Current Year (Fair Value)';
+          } else {
+            // For future years, apply cycle logic
+            switch (cycleYear) {
+              case 0: // Year 1 of cycle: Deep bear market at floor
+                cyclePrice = floorValue;
+                cyclePhase = 'Deep Bear (Floor)';
+                break;
+              case 1: // Year 2 of cycle: Bear market recovery
+                cyclePrice = floorValue + (bitcoinFairValue - floorValue) * 0.75;
+                cyclePhase = 'Bear Market Recovery';
+                break;
+              case 2: // Year 3 of cycle: Bull market
+                cyclePrice = bitcoinFairValue + (upperBound - bitcoinFairValue) * 0.7;
+                cyclePhase = 'Bull Market';
+                break;
+              case 3: // Year 4 of cycle: Bull peak and correction
+                cyclePrice = bitcoinFairValue + (upperBound - bitcoinFairValue) * 0.3;
+                cyclePhase = 'Bull Peak & Correction';
+                break;
+              default:
+                cyclePrice = bitcoinFairValue;
+                cyclePhase = 'Fair Value';
+            }
           }
           
-          // Debug logging for bear market years
-          if (isBearMarketYear) {
-            console.log(`🐻 BEAR MARKET DEBUG - Year ${simulationYear}:
-              Year Data Cash Invested: $${yearData.cashInvested.toLocaleString()}
-              Year Data Bitcoin Purchased: ${yearData.bitcoinPurchased.toFixed(6)} BTC
-              Cycle Year: ${cycleYear} (of 4-year cycle)
+          // Debug logging for all years to verify cycle alignment
+          if (year === 0) { // Only log first year to verify alignment
+            console.log(`🔄 CYCLE ALIGNMENT DEBUG - Year ${simulationYear}:
+              Cycle Year: ${cycleYear} (of 4-year cycle) - ${cyclePhase}
               Bitcoin Fair Value: $${bitcoinFairValue.toLocaleString()}
-              Cycle Price: $${cyclePrice.toLocaleString()}
-              Expected Bitcoin (cash/price): ${(yearData.cashInvested / cyclePrice).toFixed(6)} BTC
+              Bitcoin Cycle Price: $${cyclePrice.toLocaleString()}
+              Is Bear Market: ${isBearMarketYear}
               Double Down Enabled: ${monthlySavingsInputs.doubleDownInBearMarkets}`);
           }
           
@@ -946,6 +983,7 @@ const BitcoinChart: React.FC = () => {
               step="1000"
               min="0"
               placeholder="Enter annual needs"
+              title="This calculator uses Net Present Value (NPV) - enter amounts in today's purchasing power. No inflation adjustments are made as the Power Law model operates in real terms."
             />
             <span className="input-unit">USD</span>
           </div>
