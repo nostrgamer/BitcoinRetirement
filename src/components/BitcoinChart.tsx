@@ -101,14 +101,8 @@ const BitcoinChart: React.FC = () => {
       setCurrentFloorValue(floorValue);
       setCurrentUpperBound(upperBound);
 
-      // Debug: Check what historical data we received
-      console.log(`Chart received ${historicalPrices.length} historical price points`);
-      if (historicalPrices.length > 0) {
-        const pre2020Count = historicalPrices.filter(d => new Date(d.date).getFullYear() < 2020).length;
-        console.log(`Pre-2020 data in chart: ${pre2020Count} points`);
-        console.log(`First data point: ${historicalPrices[0].date} - $${historicalPrices[0].price}`);
-        console.log(`Last data point: ${historicalPrices[historicalPrices.length - 1].date} - $${historicalPrices[historicalPrices.length - 1].price}`);
-      }
+      // Process historical data for chart display
+      console.log(`Chart loaded ${historicalPrices.length} historical price points`);
 
       // Combine actual prices with power law data (fair value, floor, and upper bound)
       const combinedData: ChartDataPoint[] = historicalPrices.map(priceData => {
@@ -176,23 +170,9 @@ const BitcoinChart: React.FC = () => {
         return false;
       });
 
-      console.log(`Filtered ${combinedData.length - filteredData.length} data points with values too small for log scale`);
-      console.log(`Final chart data: ${filteredData.length} points`);
-      if (filteredData.length > 0) {
-        const pre2020Final = filteredData.filter(d => new Date(d.date).getFullYear() < 2020);
-        const year2025Data = filteredData.filter(d => new Date(d.date).getFullYear() === 2025);
-        const year2026Data = filteredData.filter(d => new Date(d.date).getFullYear() === 2026);
-        
-        console.log(`Pre-2020 data: ${pre2020Final.length} points`);
-        console.log(`2025 data: ${year2025Data.length} points`);
-        console.log(`2026 data: ${year2026Data.length} points`);
-        console.log(`First chart point: ${filteredData[0].date} - Actual: $${filteredData[0].actualPrice}`);
-        console.log(`Last chart point: ${filteredData[filteredData.length - 1].date} - Actual: $${filteredData[filteredData.length - 1].actualPrice}`);
-        
-        // Show some 2025 data if available
-        if (year2025Data.length > 0) {
-          console.log(`Sample 2025 data: ${year2025Data[0].date} - $${year2025Data[0].actualPrice}`);
-        }
+      // Filter out data points with values too small for log scale display
+      if (combinedData.length - filteredData.length > 0) {
+        console.log(`Filtered ${combinedData.length - filteredData.length} data points with values too small for log scale`);
       }
 
       setChartData(filteredData);

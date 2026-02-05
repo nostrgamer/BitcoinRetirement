@@ -76,8 +76,9 @@ export class SmartWithdrawalStrategy {
     withdrawalNeeded: number
   ): WithdrawalDecision {
     
-    const bitcoinValue = availableBitcoin * currentPrice;
-    const totalAssets = availableCash + bitcoinValue;
+    // Bitcoin value calculation for potential future use
+    // const bitcoinValue = availableBitcoin * currentPrice;
+    // const totalAssets = availableCash + bitcoinValue;
 
     // Strategy zones based on historical analysis
     if (fairValueRatio <= 0.5) {
@@ -182,7 +183,8 @@ export class SmartWithdrawalStrategy {
     // Near fair value - balanced approach
     const totalValue = availableCash + (availableBitcoin * currentPrice);
     const cashRatio = availableCash / totalValue;
-    const bitcoinRatio = 1 - cashRatio;
+    // Bitcoin ratio calculation for potential future use
+    // const bitcoinRatio = 1 - cashRatio;
     
     // Use assets proportionally, but slightly favor cash to maintain Bitcoin exposure
     const preferredCashUsage = Math.min(availableCash, withdrawalNeeded * Math.min(0.6, cashRatio * 1.2));
@@ -279,7 +281,8 @@ export class SmartWithdrawalStrategy {
     context: WithdrawalContext, 
     fairValueRatio: number
   ): WithdrawalDecision {
-    const { availableCash, availableBitcoin, withdrawalNeeded, currentBitcoinPrice } = context;
+    const { availableCash, withdrawalNeeded, currentBitcoinPrice } = context;
+    // availableBitcoin extracted but not used in current emergency logic
     
     if (availableCash >= withdrawalNeeded) {
       return {
