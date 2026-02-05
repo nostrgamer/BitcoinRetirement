@@ -13,7 +13,6 @@ A comprehensive retirement planning tool that uses Bitcoin's Power Law model to 
 ### Retirement Planning
 - **Portfolio Input**: Enter your Bitcoin holdings, cash reserves, and annual expenses
 - **Withdrawal Simulation**: 50-year Monte Carlo-style simulation using realistic Bitcoin cycles
-- **Bear Market Testing**: Conservative 20-year bear market survival analysis
 - **Retirement Timeline**: Calculate when you can achieve financial independence
 
 ### Savings Strategy
