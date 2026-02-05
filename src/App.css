@@ -761,4 +761,85 @@ main {
   }
 }
 
+/* Smart Withdrawal Strategy Styling */
+.strategy-advice {
+  background: linear-gradient(135deg, rgba(33, 150, 243, 0.1), rgba(255, 255, 255, 0.05));
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  border-radius: 12px;
+  padding: 20px;
+  margin: 20px 0;
+}
+
+.strategy-advice h4 {
+  color: #64b5f6;
+  margin: 0 0 15px 0;
+  font-size: 1.2em;
+}
+
+.advice-content p {
+  color: #e3f2fd;
+  margin: 0 0 15px 0;
+  padding: 12px;
+  background: rgba(33, 150, 243, 0.1);
+  border-radius: 8px;
+  border-left: 4px solid #2196f3;
+  line-height: 1.5;
+}
+
+.withdrawal-preview {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 8px;
+  padding: 15px;
+  margin-top: 15px;
+}
+
+.withdrawal-preview h5 {
+  color: #90caf9;
+  margin: 0 0 12px 0;
+  font-size: 1em;
+}
+
+.preview-details {
+  display: grid;
+  gap: 10px;
+}
+
+.preview-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.preview-item:last-of-type {
+  border-bottom: none;
+}
+
+.preview-label {
+  color: #bbdefb;
+  font-weight: 500;
+}
+
+.preview-value {
+  color: #ffffff;
+  font-weight: bold;
+}
+
+.preview-reasoning {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(33, 150, 243, 0.1);
+  border-radius: 6px;
+  color: #e3f2fd;
+  line-height: 1.4;
+  font-size: 0.95em;
+}
+
+.preview-reasoning strong {
+  color: #90caf9;
+}
+
+
+
  

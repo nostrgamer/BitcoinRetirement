@@ -12,6 +12,8 @@ import {
 import { BitcoinAPI } from '../services/BitcoinAPI';
 import { BitcoinPowerLaw } from '../models/PowerLaw';
 import { ChartDataPoint, RetirementInputs, MonthlySavingsInputs, SavingsProjection } from '../types/Bitcoin';
+import { SmartWithdrawalStrategy } from '../utils/SmartWithdrawalStrategy';
+
 
 const BitcoinChart: React.FC = () => {
   const [chartData, setChartData] = useState<ChartDataPoint[]>([]);
@@ -99,6 +101,15 @@ const BitcoinChart: React.FC = () => {
       setCurrentFloorValue(floorValue);
       setCurrentUpperBound(upperBound);
 
+      // Debug: Check what historical data we received
+      console.log(`Chart received ${historicalPrices.length} historical price points`);
+      if (historicalPrices.length > 0) {
+        const pre2020Count = historicalPrices.filter(d => new Date(d.date).getFullYear() < 2020).length;
+        console.log(`Pre-2020 data in chart: ${pre2020Count} points`);
+        console.log(`First data point: ${historicalPrices[0].date} - $${historicalPrices[0].price}`);
+        console.log(`Last data point: ${historicalPrices[historicalPrices.length - 1].date} - $${historicalPrices[historicalPrices.length - 1].price}`);
+      }
+
       // Combine actual prices with power law data (fair value, floor, and upper bound)
       const combinedData: ChartDataPoint[] = historicalPrices.map(priceData => {
         const date = new Date(priceData.timestamp);
@@ -150,7 +161,41 @@ const BitcoinChart: React.FC = () => {
       // Sort by timestamp to ensure proper chart ordering
       combinedData.sort((a, b) => a.timestamp - b.timestamp);
 
-      setChartData(combinedData);
+      // Filter out data points with Power Law values that are too small for log scale
+      // This can happen with very early Bitcoin dates where the Power Law model produces tiny values
+      const filteredData = combinedData.filter(d => {
+        // Keep all data points where actual price exists and is reasonable for log scale
+        if (d.actualPrice !== null && d.actualPrice >= 0.01) {
+          return true;
+        }
+        // For future projections (actualPrice is null), keep if Power Law values are reasonable
+        if (d.actualPrice === null && d.powerLawPrice >= 0.01) {
+          return true;
+        }
+        // Filter out points with very small values that cause log scale issues
+        return false;
+      });
+
+      console.log(`Filtered ${combinedData.length - filteredData.length} data points with values too small for log scale`);
+      console.log(`Final chart data: ${filteredData.length} points`);
+      if (filteredData.length > 0) {
+        const pre2020Final = filteredData.filter(d => new Date(d.date).getFullYear() < 2020);
+        const year2025Data = filteredData.filter(d => new Date(d.date).getFullYear() === 2025);
+        const year2026Data = filteredData.filter(d => new Date(d.date).getFullYear() === 2026);
+        
+        console.log(`Pre-2020 data: ${pre2020Final.length} points`);
+        console.log(`2025 data: ${year2025Data.length} points`);
+        console.log(`2026 data: ${year2026Data.length} points`);
+        console.log(`First chart point: ${filteredData[0].date} - Actual: $${filteredData[0].actualPrice}`);
+        console.log(`Last chart point: ${filteredData[filteredData.length - 1].date} - Actual: $${filteredData[filteredData.length - 1].actualPrice}`);
+        
+        // Show some 2025 data if available
+        if (year2025Data.length > 0) {
+          console.log(`Sample 2025 data: ${year2025Data[0].date} - $${year2025Data[0].actualPrice}`);
+        }
+      }
+
+      setChartData(filteredData);
       setLastUpdated(new Date());
     } catch (err) {
       console.error('Error loading chart data:', err);
@@ -675,27 +720,29 @@ const BitcoinChart: React.FC = () => {
         // Keep remainingBitcoin and remainingCash unchanged to show starting amounts
         actualWithdrawal = 0; // No withdrawal in retirement start year
       } else {
-        // Determine strategy: use cash when below fair value, Bitcoin when above
-        const shouldUseCash = priceToFairRatio < 1.0 && remainingCash > 0;
+        // Use enhanced Smart Withdrawal Strategy based on Power Law analysis
+        const withdrawalDecision = SmartWithdrawalStrategy.calculateWithdrawal({
+          currentBitcoinPrice: bitcoinPrice,
+          currentDate: targetDate,
+          availableCash: remainingCash,
+          availableBitcoin: remainingBitcoin,
+          withdrawalNeeded: actualWithdrawal
+        });
 
-        if (shouldUseCash && remainingCash >= actualWithdrawal) {
-          // Use cash entirely
-          cashUsed = actualWithdrawal;
-          remainingCash -= cashUsed;
-          withdrawalSource = 'Cash (HODL)';
-        } else if (shouldUseCash && remainingCash > 0) {
-          // Use remaining cash + some Bitcoin
-          cashUsed = remainingCash;
-          const bitcoinNeeded = actualWithdrawal - cashUsed;
-          bitcoinSold = bitcoinNeeded / bitcoinPrice;
-          remainingCash = 0;
-          remainingBitcoin -= bitcoinSold;
-          withdrawalSource = `Cash + Bitcoin (${(cashUsed/actualWithdrawal*100).toFixed(0)}%/${(100-cashUsed/actualWithdrawal*100).toFixed(0)}%)`;
+        cashUsed = withdrawalDecision.useCashAmount;
+        bitcoinSold = withdrawalDecision.useBitcoinAmount;
+        remainingCash -= cashUsed;
+        remainingBitcoin -= bitcoinSold;
+        
+        // Enhanced withdrawal source with strategy reasoning
+        if (withdrawalDecision.useCashAmount > 0 && withdrawalDecision.useBitcoinAmount > 0) {
+          const cashPercent = (cashUsed / actualWithdrawal * 100).toFixed(0);
+          const bitcoinPercent = (100 - parseFloat(cashPercent)).toFixed(0);
+          withdrawalSource = `${withdrawalDecision.strategy} (${cashPercent}%/${bitcoinPercent}%)`;
+        } else if (withdrawalDecision.useCashAmount > 0) {
+          withdrawalSource = withdrawalDecision.strategy;
         } else {
-          // Use Bitcoin entirely
-          bitcoinSold = actualWithdrawal / bitcoinPrice;
-          remainingBitcoin -= bitcoinSold;
-          withdrawalSource = 'Bitcoin';
+          withdrawalSource = withdrawalDecision.strategy;
         }
 
         // Check if we ran out of assets
@@ -882,7 +929,7 @@ const BitcoinChart: React.FC = () => {
             />
             <YAxis 
               scale="log"
-              domain={['dataMin', 'dataMax']} // Dynamic range to accommodate future projections
+              domain={['dataMin', 'dataMax']} // Dynamic range - data is now pre-filtered to avoid log scale issues
               tickFormatter={formatPrice}
               tick={{ fontSize: 12 }}
               width={60}
@@ -1106,6 +1153,8 @@ const BitcoinChart: React.FC = () => {
               <div className={`status-indicator ${simulationSucceeds ? 'can-retire' : 'cannot-retire'}`}>
                 {simulationSucceeds ? '✅ Ready to Retire!' : '⏳ Keep Building...'}
               </div>
+              
+
             </div>
             
             {/* Historical Retirement Information */}
@@ -1221,6 +1270,55 @@ const BitcoinChart: React.FC = () => {
           </div>
         );
       })()}
+      
+      {/* Smart Withdrawal Strategy Advice */}
+      {currentPrice && currentFairValue && retirementInputs.bitcoinAmount > 0 && (
+        <div className="strategy-advice">
+          <h4>🧠 Smart Withdrawal Strategy</h4>
+          <div className="advice-content">
+            <p>{SmartWithdrawalStrategy.getRebalancingAdvice(
+              currentPrice, 
+              new Date(), 
+              retirementInputs.bitcoinAmount, 
+              retirementInputs.cashAmount
+            )}</p>
+            
+            {/* Current withdrawal decision preview */}
+            {retirementInputs.annualWithdrawal > 0 && (() => {
+              const previewDecision = SmartWithdrawalStrategy.calculateWithdrawal({
+                currentBitcoinPrice: currentPrice,
+                currentDate: new Date(),
+                availableCash: retirementInputs.cashAmount,
+                availableBitcoin: retirementInputs.bitcoinAmount,
+                withdrawalNeeded: retirementInputs.annualWithdrawal
+              });
+              
+              return (
+                <div className="withdrawal-preview">
+                  <h5>If withdrawing ${retirementInputs.annualWithdrawal.toLocaleString()} today:</h5>
+                  <div className="preview-details">
+                    <div className="preview-item">
+                      <span className="preview-label">Strategy:</span>
+                      <span className="preview-value">{previewDecision.strategy}</span>
+                    </div>
+                    <div className="preview-item">
+                      <span className="preview-label">Cash Used:</span>
+                      <span className="preview-value">${previewDecision.useCashAmount.toLocaleString()}</span>
+                    </div>
+                    <div className="preview-item">
+                      <span className="preview-label">Bitcoin Sold:</span>
+                      <span className="preview-value">{previewDecision.useBitcoinAmount.toFixed(4)} BTC</span>
+                    </div>
+                    <div className="preview-reasoning">
+                      <strong>Reasoning:</strong> {previewDecision.reasoning}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        </div>
+      )}
       
       {/* 50-Year Simulation Validation */}
       {(() => {

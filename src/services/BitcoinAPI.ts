@@ -79,36 +79,71 @@ export class BitcoinAPI {
           const today = new Date();
           const daysSinceLastData = Math.floor((today.getTime() - latestCsvDate.getTime()) / (1000 * 60 * 60 * 24));
           
-          if (daysSinceLastData <= 1) {
-            console.log(`CSV data is very current (${daysSinceLastData} days old), but will still check for today's data`);
-            // Always try to get today's data even if CSV is very recent
-            try {
-              const todayData = await this.getHistoricalPrices(3); // Get last 3 days to ensure we have today
-              
-              // Add only data that's newer than CSV
-              const newerData = todayData.filter(apiPoint => 
-                new Date(apiPoint.date).getTime() > latestCsvDate.getTime()
-              );
-              
-              if (newerData.length > 0) {
-                console.log(`Found ${newerData.length} newer data points from API`);
-                const combinedData = [...csvData, ...newerData];
-                combinedData.sort((a, b) => a.timestamp - b.timestamp);
-                return combinedData;
-              }
-            } catch (apiError) {
-              console.log('Failed to get today\'s data from API, using CSV only');
-            }
-            
-            return csvData;
-          }
-          
-          // Supplement with recent API data
+          // Supplement with recent API data to fill the gap
           console.log(`CSV data is ${daysSinceLastData} days old, fetching recent data...`);
           try {
-            const recentData = await this.getHistoricalPrices(Math.min(daysSinceLastData + 5, 30));
+            let recentData: BitcoinPriceData[];
             
-            // Combine CSV with recent API data (remove overlaps)
+            if (daysSinceLastData > 365) {
+              // Large gap - try CoinGecko range API first for specific date range
+              console.log(`Large gap detected (${daysSinceLastData} days), trying CoinGecko range API...`);
+              try {
+                const startTimestamp = Math.floor(latestCsvDate.getTime() / 1000);
+                const endTimestamp = Math.floor(Date.now() / 1000);
+                
+                const response = await fetch(
+                  `${this.COINGECKO_BASE_URL}/coins/bitcoin/market_chart/range?vs_currency=usd&from=${startTimestamp}&to=${endTimestamp}`
+                );
+                
+                if (response.ok) {
+                  const data = await response.json();
+                  console.log(`CoinGecko range API: Got ${data.prices ? data.prices.length : 0} data points`);
+                  
+                  if (data.prices && data.prices.length > 0) {
+                    recentData = data.prices.map((item: [number, number]) => {
+                      const [timestamp, price] = item;
+                      const date = new Date(timestamp);
+                      
+                      return {
+                        date: date.toISOString().split('T')[0],
+                        price: price,
+                        timestamp: timestamp
+                      };
+                    });
+                    
+                    // Filter to only data newer than CSV
+                    recentData = recentData.filter(apiPoint => 
+                      new Date(apiPoint.date).getTime() > latestCsvDate.getTime()
+                    );
+                    console.log(`CoinGecko range API returned ${recentData.length} data points newer than CSV`);
+                  } else {
+                    throw new Error('No data from CoinGecko range API');
+                  }
+                } else {
+                  throw new Error(`CoinGecko range API failed: ${response.status}`);
+                }
+              } catch (rangeError) {
+                console.log('CoinGecko range API failed, trying extended API...', rangeError);
+                try {
+                  recentData = await this.getExtendedHistoricalPrices();
+                  // Filter to only data newer than CSV
+                  recentData = recentData.filter(apiPoint => 
+                    new Date(apiPoint.date).getTime() > latestCsvDate.getTime()
+                  );
+                  console.log(`Extended API returned ${recentData.length} data points newer than CSV`);
+                } catch (extendedError) {
+                  console.log('Extended API also failed, trying regular API for maximum days...');
+                  recentData = await this.getHistoricalPrices(365);
+                }
+              }
+            } else {
+              // Regular gap - use standard API
+              const daysToFetch = Math.min(daysSinceLastData + 5, 365);
+              console.log(`Fetching ${daysToFetch} days of API data`);
+              recentData = await this.getHistoricalPrices(daysToFetch);
+            }
+            
+            // Combine CSV with API data (remove overlaps)
             const combinedData = [...csvData];
             recentData.forEach(apiPoint => {
               const existsInCsv = csvData.some(csvPoint => csvPoint.date === apiPoint.date);
@@ -118,10 +153,10 @@ export class BitcoinAPI {
             });
             
             combinedData.sort((a, b) => a.timestamp - b.timestamp);
-            console.log(`Combined dataset: ${combinedData.length} total data points`);
+            console.log(`Combined dataset: ${combinedData.length} total data points (${csvData.length} from CSV + ${combinedData.length - csvData.length} from API)`);
             return combinedData;
           } catch (apiError) {
-            console.log('Recent API data failed, using CSV only');
+            console.log('All API attempts failed, using CSV only');
             return csvData;
           }
         }
