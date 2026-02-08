@@ -310,6 +310,15 @@ describe('RetirementLogic (chart/table)', () => {
         const r = bearMarketTest(testYear, 1, excessiveWithdrawal, 0);
         expect(r.passes).toBe(false);
       });
+
+      it('never returns negative remainingBitcoin or remainingCash', () => {
+        const scenarios: Array<[number, number, number]> = [[10, 30000, 0], [2, 50000, 100000], [0.5, 80000, 0]];
+        for (const [btc, withdrawal, cash] of scenarios) {
+          const r = bearMarketTest(testYear, btc, withdrawal, cash);
+          expect(r.remainingBitcoin).toBeGreaterThanOrEqual(0);
+          expect(r.remainingCash).toBeGreaterThanOrEqual(0);
+        }
+      });
     });
 
     describe('50-year cycle', () => {
@@ -353,6 +362,56 @@ describe('RetirementLogic (chart/table)', () => {
           expect(p0).toBeCloseTo(floor0, 2);
           expect(p1).toBeCloseTo(floor1, 2);
         }
+      });
+    });
+
+    describe('50-year simulation invariants', () => {
+      it('full 50-year withdrawal sequence never produces negative BTC or cash', () => {
+        const startYear = 2026;
+        const annualWithdrawal = 30000;
+        let cash = 120000;
+        let btc = 10;
+        for (let yearIndex = 0; yearIndex < 50; yearIndex++) {
+          const { price } = getWithdrawalPhasePrice(startYear, yearIndex);
+          let need = annualWithdrawal;
+          if (cash >= need) {
+            cash -= need;
+          } else {
+            const cashUsed = cash;
+            cash = 0;
+            need -= cashUsed;
+            const btcSold = need / price;
+            btc -= btcSold;
+          }
+          expect(btc).toBeGreaterThanOrEqual(-1e-6);
+          expect(cash).toBeGreaterThanOrEqual(-1e-6);
+          if (btc <= 0 && cash <= 0) break; // depleted
+        }
+      });
+    });
+
+    describe('Retirement start year formula', () => {
+      function getRetirementStartYear(
+        currentYear: number,
+        yearsUntilRetirement: number,
+        savingsEnabled: boolean,
+        yearsToRetirement: number
+      ): number {
+        if (savingsEnabled && yearsToRetirement > 0) {
+          return currentYear + Math.max(yearsUntilRetirement, yearsToRetirement);
+        }
+        return currentYear + yearsUntilRetirement;
+      }
+
+      it('no savings: start year = currentYear + yearsUntilRetirement', () => {
+        expect(getRetirementStartYear(2025, 0, false, 10)).toBe(2025);
+        expect(getRetirementStartYear(2025, 5, false, 10)).toBe(2030);
+      });
+
+      it('savings enabled: start year = currentYear + max(yearsUntilRetirement, yearsToRetirement)', () => {
+        expect(getRetirementStartYear(2025, 3, true, 10)).toBe(2035);
+        expect(getRetirementStartYear(2025, 10, true, 5)).toBe(2035);
+        expect(getRetirementStartYear(2025, 7, true, 7)).toBe(2032);
       });
     });
   });

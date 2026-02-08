@@ -123,6 +123,10 @@ Run: `npm test -- PowerLaw.test.ts`
 | 50-year cycle | Cycle phases consistent for different retirement start years (2026, 2035, 2044) |
 | Chart plan | Far future year (anchor + 50) returns price within floor–upper |
 | Chart plan | Offset 0 and 1 are floor for any anchor year |
+| Bear Market | Never returns negative remainingBitcoin or remainingCash |
+| 50-year simulation | Full 50-year withdrawal sequence never produces negative BTC or cash |
+| Retirement start year | No savings: start = currentYear + yearsUntilRetirement |
+| Retirement start year | Savings enabled: start = currentYear + max(yearsUntilRetirement, yearsToRetirement) |
 
 **SmartWithdrawalStrategy.test.ts** (new file):
 
