@@ -109,6 +109,41 @@ Run: `npm test -- PowerLaw.test.ts`
 
 ---
 
+## 8. Edge-case tests
+
+**RetirementLogic.test.ts** (“Edge cases” describe block):
+
+| Area | Test |
+|------|------|
+| Bear Market | Negative cash treated as zero (clamped) |
+| Bear Market | Pass when runway is exactly 20 years after bear |
+| Bear Market | Fail when runway is just under 20 years |
+| Bear Market | Fail in year 1 when withdrawal exceeds what 1 BTC at floor can provide |
+| 50-year cycle | Year 49 has valid phase (floor/recovery/bull/peak) |
+| 50-year cycle | Cycle phases consistent for different retirement start years (2026, 2035, 2044) |
+| Chart plan | Far future year (anchor + 50) returns price within floor–upper |
+| Chart plan | Offset 0 and 1 are floor for any anchor year |
+
+**SmartWithdrawalStrategy.test.ts** (new file):
+
+| Area | Test |
+|------|------|
+| Zero / insufficient | withdrawalNeeded = 0 → total used = 0 |
+| Zero / insufficient | availableCash = 0, availableBitcoin = 0 → returns decision without throwing |
+| Zero / insufficient | When assets suffice, useCashAmount + useBitcoinAmount × price = withdrawalNeeded |
+| Boundary ratios | 0.5 → HODL_BITCOIN, cash first |
+| Boundary ratios | 0.8 → HODL_BITCOIN |
+| Boundary ratios | 1.25 (overvalued) → SPEND_BITCOIN, total used = withdrawal |
+| Boundary ratios | 2.5 → SPEND_BITCOIN |
+| Boundary ratios | > 5 → Bitcoin only, SPEND_BITCOIN |
+| Emergency mode | Prefer cash first when available |
+| Emergency mode | Cash then Bitcoin when cash insufficient |
+| getRebalancingAdvice | Zero total value (no throw); normal allocation returns string |
+
+Run: `npm test -- RetirementLogic.test.ts` and `npm test -- SmartWithdrawalStrategy.test.ts`
+
+---
+
 ## Running automated tests
 
 ```bash
@@ -130,7 +165,8 @@ npm test -- RetirementCalculations.test.ts
 ## Adding or changing tests
 
 - **Power Law:** `src/models/PowerLaw.test.ts`
-- **Retirement logic used by chart/table:** `src/utils/RetirementLogic.test.ts` (formulas and rules only)
+- **Retirement logic used by chart/table:** `src/utils/RetirementLogic.test.ts` (formulas, rules, edge cases)
+- **Smart Withdrawal Strategy:** `src/utils/SmartWithdrawalStrategy.test.ts` (ratios, emergency, zero assets)
 - **Legacy RetirementCalculations:** `src/utils/RetirementCalculations.test.ts`
 
 When you change the Bear Market Test (e.g. number of years at floor) or the 50-year cycle sequence, update both the code and the corresponding describe blocks in `RetirementLogic.test.ts` and this plan.
