@@ -17,6 +17,8 @@ export interface ChartDataPoint {
   powerLawFloor: number;
   powerLawUpperBound: number;
   timestamp: number;
+  /** Projected price from 50-year withdrawal plan (when retirement inputs are set) */
+  withdrawalPlanPrice?: number | null;
 }
 
 export interface RetirementInputs {

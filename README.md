@@ -58,6 +58,16 @@ Additional levels:
 - **Floor Price**: 42% of fair value (support level)
 - **Upper Bound**: 200% of fair value (resistance level)
 
+### Retirement worst case (within Power Law)
+
+For planning purposes, the app assumes a **true worst case** that stays within the Power Law band:
+
+- **Below floor:** We plan for **2 consecutive years** of withdrawals at the Power Law floor (0.42× fair value). That is the worst-case duration we treat as still “within bounds” of the model (longer would start to challenge the Power Law).
+- **Above 2×:** Prolonged euphoria is not a withdrawal risk; the risk is the drawdown after. The 50-year simulation uses cycle phases that can include years near 2×.
+- **After the bear:** The retiree must still have **at least 20 years of runway** at fair value after surviving the 2-year floor + 1-year recovery.
+
+So a retiree is prepared for: **2 years at floor → 1 year recovery → 20+ years at fair value.** No change to the Power Law formula is required for that scenario.
+
 ## Getting Started
 
 ### Prerequisites

@@ -395,8 +395,7 @@ const BitcoinChart: React.FC = () => {
   const testBearMarketSurvival = (bitcoinPrice: number, year: number, bitcoinHoldings: number, annualWithdrawal: number, cashHoldings: number = 0) => {
     if (bitcoinHoldings <= 0 || annualWithdrawal <= 0) return { passes: false };
     
-    // Bear Market Test: Realistic 24-month bear market based on historical cycles
-    // Strategy: Use cash during bear market to preserve Bitcoin
+    // Bear Market Test: Worst case = 2 years at floor, then 1 year recovery (within Power Law). Use cash first.
     
     let remainingBitcoin = bitcoinHoldings;
     let remainingCash = Math.max(0, cashHoldings);
@@ -405,7 +404,7 @@ const BitcoinChart: React.FC = () => {
     const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
     const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
     
-    // Year 1: Deep bear market at Power Law floor (first 12 months)
+    // Years 1 & 2 at Power Law floor (worst case: 2 consecutive years at 0.42x), then Year 3 recovery
     const deepBearPrice = floorValue;
     
     // Smart strategy: Use cash first during the crash
@@ -421,8 +420,17 @@ const BitcoinChart: React.FC = () => {
       
       if (remainingBitcoin < 0) return { passes: false }; // Ran out of Bitcoin in year 1
     }
+    // Second year at floor (true worst case: 2 consecutive years at 0.42x)
+    if (remainingCash >= annualWithdrawal) {
+      remainingCash -= annualWithdrawal;
+    } else {
+      const remainingNeeded = annualWithdrawal - remainingCash;
+      remainingCash = 0;
+      remainingBitcoin -= remainingNeeded / deepBearPrice;
+      if (remainingBitcoin < 0) return { passes: false };
+    }
     
-    // Year 2: Bear market recovery (second 12 months) - price between floor and fair value
+    // Year 3: Bear market recovery (second 12 months) - price between floor and fair value
     const bearRecoveryPrice = floorValue + (fairValue - floorValue) * 0.75; // 75% of way to fair value
     if (remainingCash >= annualWithdrawal) {
       remainingCash -= annualWithdrawal;
@@ -432,10 +440,10 @@ const BitcoinChart: React.FC = () => {
       const bitcoinToSell = remainingNeeded / bearRecoveryPrice;
       remainingBitcoin -= bitcoinToSell;
       
-      if (remainingBitcoin < 0) return { passes: false }; // Ran out of Bitcoin in year 2
+      if (remainingBitcoin < 0) return { passes: false }; // Ran out of Bitcoin in year 3
     }
     
-    // Year 3: Back to fair value - check if remaining portfolio can last at least 20 more years
+    // Year 4+: Back to fair value - check if remaining portfolio can last at least 20 more years
     const sustainablePrice = fairValue;
     const remainingBitcoinValue = remainingBitcoin * sustainablePrice;
     const totalRemainingValue = remainingBitcoinValue + remainingCash;
@@ -647,33 +655,35 @@ const BitcoinChart: React.FC = () => {
       let bitcoinPrice;
       let cyclePhase = '';
       
-      if (year === 0) {
-        // For retirement year (year 0 of simulation), use fair value at retirement date
-        bitcoinPrice = fairValue;
-        cyclePhase = 'Retirement Start (Fair Value)';
+      const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
+      const upperBound = BitcoinPowerLaw.calculateUpperBound(targetDate);
+
+      // Bear starts at retirement (matches chart: projected price = start of retirement)
+      if (year === 0 || year === 1) {
+        // First two years: 2 consecutive years at floor
+        bitcoinPrice = floorValue;
+        cyclePhase = year === 0 ? 'Retirement Start (Deep Bear — Year 1)' : 'Deep Bear (Floor) — Year 2';
+      } else if (year === 2) {
+        // Third year: bear market recovery
+        bitcoinPrice = floorValue + (fairValue - floorValue) * 0.75;
+        cyclePhase = 'Bear Market Recovery';
       } else {
-        // Realistic Bitcoin cycles based on historical data:
-        // 4-year cycles with proper phase distribution
-        // Bear market: ~2 years, Bull market: ~1.5 years, Correction: ~0.5 years
-        
-        const cycleYear = (year - 1) % 4; // 0, 1, 2, 3 within each 4-year cycle
-        const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
-        const upperBound = BitcoinPowerLaw.calculateUpperBound(targetDate);
-        
+        // From year 3 onward: normal 4-year cycle (bull → peak → floor → recovery)
+        const cycleYear = (year - 3) % 4; // year 3→0 (floor), 4→1 (recovery), 5→2 (bull), 6→3 (peak), ...
         switch (cycleYear) {
-          case 0: // Year 1 of cycle: Deep bear market at floor
+          case 0:
             bitcoinPrice = floorValue;
             cyclePhase = 'Deep Bear (Floor)';
             break;
-          case 1: // Year 2 of cycle: Bear market recovery
+          case 1:
             bitcoinPrice = floorValue + (fairValue - floorValue) * 0.75;
             cyclePhase = 'Bear Market Recovery';
             break;
-          case 2: // Year 3 of cycle: Bull market
+          case 2:
             bitcoinPrice = fairValue + (upperBound - fairValue) * 0.7;
             cyclePhase = 'Bull Market';
             break;
-          case 3: // Year 4 of cycle: Bull peak and correction
+          case 3:
             bitcoinPrice = fairValue + (upperBound - fairValue) * 0.3;
             cyclePhase = 'Bull Peak & Correction';
             break;
@@ -686,50 +696,43 @@ const BitcoinChart: React.FC = () => {
       // Calculate price ratio for all years
       const priceToFairRatio = bitcoinPrice / fairValue;
       
-      // For retirement start year (year 0), show amounts BEFORE any withdrawals to match retirement analysis
       let withdrawalSource = '';
       let cashUsed = 0;
       let bitcoinSold = 0;
-      
-      // Determine actual withdrawal amount for this year
       let actualWithdrawal = annualWithdrawal;
       
-      if (year === 0) {
-        // Retirement start - show totals before any withdrawals (matches retirement analysis display)
-        withdrawalSource = 'Retirement Start (No Withdrawal Yet)';
-        // Keep remainingBitcoin and remainingCash unchanged to show starting amounts
-        actualWithdrawal = 0; // No withdrawal in retirement start year
+      // Withdrawals start in year 0 (first year of retirement = first year at floor)
+      const withdrawalDecision = SmartWithdrawalStrategy.calculateWithdrawal({
+        currentBitcoinPrice: bitcoinPrice,
+        currentDate: targetDate,
+        availableCash: remainingCash,
+        availableBitcoin: remainingBitcoin,
+        withdrawalNeeded: actualWithdrawal
+      });
+
+      cashUsed = withdrawalDecision.useCashAmount;
+      bitcoinSold = withdrawalDecision.useBitcoinAmount;
+      remainingCash -= cashUsed;
+      remainingBitcoin -= bitcoinSold;
+      
+      if (withdrawalDecision.useCashAmount > 0 && withdrawalDecision.useBitcoinAmount > 0) {
+        const cashPercent = (cashUsed / actualWithdrawal * 100).toFixed(0);
+        const bitcoinPercent = (100 - parseFloat(cashPercent)).toFixed(0);
+        withdrawalSource = `${withdrawalDecision.strategy} (${cashPercent}%/${bitcoinPercent}%)`;
+      } else if (withdrawalDecision.useCashAmount > 0) {
+        withdrawalSource = withdrawalDecision.strategy;
       } else {
-        // Use enhanced Smart Withdrawal Strategy based on Power Law analysis
-        const withdrawalDecision = SmartWithdrawalStrategy.calculateWithdrawal({
-          currentBitcoinPrice: bitcoinPrice,
-          currentDate: targetDate,
-          availableCash: remainingCash,
-          availableBitcoin: remainingBitcoin,
-          withdrawalNeeded: actualWithdrawal
-        });
+        withdrawalSource = withdrawalDecision.strategy;
+      }
 
-        cashUsed = withdrawalDecision.useCashAmount;
-        bitcoinSold = withdrawalDecision.useBitcoinAmount;
-        remainingCash -= cashUsed;
-        remainingBitcoin -= bitcoinSold;
-        
-        // Enhanced withdrawal source with strategy reasoning
-        if (withdrawalDecision.useCashAmount > 0 && withdrawalDecision.useBitcoinAmount > 0) {
-          const cashPercent = (cashUsed / actualWithdrawal * 100).toFixed(0);
-          const bitcoinPercent = (100 - parseFloat(cashPercent)).toFixed(0);
-          withdrawalSource = `${withdrawalDecision.strategy} (${cashPercent}%/${bitcoinPercent}%)`;
-        } else if (withdrawalDecision.useCashAmount > 0) {
-          withdrawalSource = withdrawalDecision.strategy;
-        } else {
-          withdrawalSource = withdrawalDecision.strategy;
-        }
-
-        // Check if we ran out of assets
-        if (remainingBitcoin < 0) {
-          remainingBitcoin = 0;
-          withdrawalSource += ' (DEPLETED)';
-        }
+      if (remainingBitcoin < 0) {
+        remainingBitcoin = 0;
+        withdrawalSource += ' (DEPLETED)';
+      }
+      
+      // Label year 0 as retirement start for display
+      if (year === 0) {
+        withdrawalSource = 'Retirement Start — ' + withdrawalSource;
       }
 
       const remainingBitcoinValue = remainingBitcoin * bitcoinPrice;
@@ -777,6 +780,10 @@ const BitcoinChart: React.FC = () => {
           {payload.map((entry: any, index: number) => {
             // Skip null actual price entries (future projections)
             if (entry.dataKey === 'actualPrice' && entry.value === null) {
+              return null;
+            }
+            // Skip null withdrawal plan price
+            if (entry.dataKey === 'withdrawalPlanPrice' && (entry.value === null || entry.value === undefined)) {
               return null;
             }
             return (
@@ -835,6 +842,36 @@ const BitcoinChart: React.FC = () => {
   const isAboveFloor = floorRatio > 1;
   const isNearUpperBound = upperBoundRatio > 0.7; // Consider "near" at 70% of 2x fair value
 
+  // Projected price line: anchor to where real price stops; bear (floor) starts immediately from there
+  const simulationForChart = simulate50YearWithdrawals();
+  const lastActualPoint = [...chartData].reverse().find(pt => pt.actualPrice != null);
+  const lastActualYear = lastActualPoint ? new Date(lastActualPoint.timestamp).getFullYear() : null;
+
+  const getChartPlanPriceForYear = (year: number): number | null => {
+    if (lastActualYear == null || year < lastActualYear) return null;
+    const targetDate = new Date(year, 0, 1);
+    const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
+    const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
+    const upperBound = BitcoinPowerLaw.calculateUpperBound(targetDate);
+    const offset = year - lastActualYear;
+    if (offset === 0 || offset === 1) return floorValue;           // 2 years at floor
+    if (offset === 2) return floorValue + (fairValue - floorValue) * 0.75; // recovery
+    const cycleYear = (offset - 3) % 4;  // then 4-year cycle: 0=floor, 1=recovery, 2=bull, 3=peak
+    switch (cycleYear) {
+      case 0: return floorValue;
+      case 1: return floorValue + (fairValue - floorValue) * 0.75;
+      case 2: return fairValue + (upperBound - fairValue) * 0.7;
+      case 3: return fairValue + (upperBound - fairValue) * 0.3;
+      default: return fairValue;
+    }
+  };
+
+  const chartDataWithPlan: ChartDataPoint[] = chartData.map(pt => ({
+    ...pt,
+    withdrawalPlanPrice: simulationForChart.length > 0 ? getChartPlanPriceForYear(new Date(pt.timestamp).getFullYear()) ?? null : null
+  }));
+  const showPlanLine = simulationForChart.length > 0 && lastActualYear != null;
+
   return (
     <div className="chart-container">
       <div className="chart-header">
@@ -891,7 +928,7 @@ const BitcoinChart: React.FC = () => {
       {/* Chart moved before inputs */}
       <div className="chart-wrapper">
         <ResponsiveContainer width="100%" height={700}>
-          <LineChart data={chartData} margin={{ top: 20, right: 30, left: 60, bottom: 40 }}>
+          <LineChart data={chartDataWithPlan} margin={{ top: 20, right: 30, left: 60, bottom: 40 }}>
             <CartesianGrid strokeDasharray="3 3" />
             <XAxis 
               dataKey="timestamp"
@@ -952,7 +989,17 @@ const BitcoinChart: React.FC = () => {
               strokeDasharray="7 3"
               name="Power Law Upper Bound (2x)"
             />
-            
+            {showPlanLine && (
+              <Line
+                type="monotone"
+                dataKey="withdrawalPlanPrice"
+                stroke="#9c27b0"
+                strokeWidth={2}
+                dot={false}
+                connectNulls={false}
+                name="50-Year Plan (Projected Prices)"
+              />
+            )}
 
           </LineChart>
         </ResponsiveContainer>
