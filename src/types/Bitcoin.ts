@@ -25,6 +25,7 @@ export interface RetirementInputs {
   bitcoinAmount: number;
   cashAmount: number;
   annualWithdrawal: number;
+  yearsUntilRetirement: number;
 }
 
 export interface MonthlySavingsInputs {

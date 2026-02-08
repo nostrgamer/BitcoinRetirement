@@ -29,7 +29,8 @@ const BitcoinChart: React.FC = () => {
   const [retirementInputs, setRetirementInputs] = useState<RetirementInputs>({
     bitcoinAmount: 0.1,
     cashAmount: 10000,
-    annualWithdrawal: 60000
+    annualWithdrawal: 60000,
+    yearsUntilRetirement: 0
   });
   const [monthlySavingsInputs, setMonthlySavingsInputs] = useState<MonthlySavingsInputs>({
     monthlySavingsAmount: 500,
@@ -298,10 +299,10 @@ const BitcoinChart: React.FC = () => {
     
     const totalBitcoinHoldings = retirementInputs.bitcoinAmount + projectedBitcoin;
     
-    // If monthly savings are enabled, evaluate retirement readiness at the planned retirement date
+    // Evaluate retirement readiness at planned retirement date (from "Years until retirement" or monthly savings)
     const currentYear = new Date().getFullYear();
     const yearsToRetirement = monthlySavingsInputs.enabled ? monthlySavingsInputs.yearsToRetirement : 0;
-    const evaluationYear = currentYear + yearsToRetirement;
+    const evaluationYear = currentYear + Math.max(retirementInputs.yearsUntilRetirement, yearsToRetirement);
     const evaluationDate = new Date(evaluationYear, 0, 1);
     
     // Calculate Bitcoin value at retirement date (not today)
@@ -331,7 +332,7 @@ const BitcoinChart: React.FC = () => {
       Bear Market Test: ${bearMarketTestResult.passes ? 'PASSED' : 'FAILED'}`);
     
     // Results are logged above for debugging - no need to store in state
-  }, [currentPrice, savingsProjection, monthlySavingsInputs.enabled, monthlySavingsInputs.yearsToRetirement, retirementInputs.bitcoinAmount, retirementInputs.annualWithdrawal, retirementInputs.cashAmount]);
+  }, [currentPrice, savingsProjection, monthlySavingsInputs.enabled, monthlySavingsInputs.yearsToRetirement, retirementInputs.bitcoinAmount, retirementInputs.yearsUntilRetirement, retirementInputs.annualWithdrawal, retirementInputs.cashAmount]);
 
   useEffect(() => {
     if (currentPrice && chartData.length > 0) {
@@ -501,8 +502,9 @@ const BitcoinChart: React.FC = () => {
 
     const simulation = [];
     const currentYear = new Date().getFullYear();
+    // Start year for withdrawals: use "Years until retirement" from Retirement Inputs; if monthly savings enabled, use the later of the two so withdrawals start after accumulation
     const yearsToRetirement = monthlySavingsInputs.enabled ? monthlySavingsInputs.yearsToRetirement : 0;
-    const retirementStartYear = currentYear + yearsToRetirement;
+    const retirementStartYear = currentYear + Math.max(retirementInputs.yearsUntilRetirement, yearsToRetirement);
 
     // Phase 1: Accumulation Phase (if monthly savings enabled)
     // Use the same calculation as retirement analysis for consistency
@@ -842,18 +844,19 @@ const BitcoinChart: React.FC = () => {
   const isAboveFloor = floorRatio > 1;
   const isNearUpperBound = upperBoundRatio > 0.7; // Consider "near" at 70% of 2x fair value
 
-  // Projected price line: anchor to where real price stops; bear (floor) starts immediately from there
+  // Projected price line: anchor to retirement start year (from "Years until retirement"); bear starts there
   const simulationForChart = simulate50YearWithdrawals();
-  const lastActualPoint = [...chartData].reverse().find(pt => pt.actualPrice != null);
-  const lastActualYear = lastActualPoint ? new Date(lastActualPoint.timestamp).getFullYear() : null;
+  const currentYear = new Date().getFullYear();
+  const yearsToRetirementForChart = monthlySavingsInputs.enabled ? monthlySavingsInputs.yearsToRetirement : 0;
+  const chartRetirementStartYear = currentYear + Math.max(retirementInputs.yearsUntilRetirement, yearsToRetirementForChart);
 
   const getChartPlanPriceForYear = (year: number): number | null => {
-    if (lastActualYear == null || year < lastActualYear) return null;
+    if (year < chartRetirementStartYear) return null;
     const targetDate = new Date(year, 0, 1);
     const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
     const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
     const upperBound = BitcoinPowerLaw.calculateUpperBound(targetDate);
-    const offset = year - lastActualYear;
+    const offset = year - chartRetirementStartYear;
     if (offset === 0 || offset === 1) return floorValue;           // 2 years at floor
     if (offset === 2) return floorValue + (fairValue - floorValue) * 0.75; // recovery
     const cycleYear = (offset - 3) % 4;  // then 4-year cycle: 0=floor, 1=recovery, 2=bull, 3=peak
@@ -870,7 +873,7 @@ const BitcoinChart: React.FC = () => {
     ...pt,
     withdrawalPlanPrice: simulationForChart.length > 0 ? getChartPlanPriceForYear(new Date(pt.timestamp).getFullYear()) ?? null : null
   }));
-  const showPlanLine = simulationForChart.length > 0 && lastActualYear != null;
+  const showPlanLine = simulationForChart.length > 0;
 
   return (
     <div className="chart-container">
@@ -1051,6 +1054,22 @@ const BitcoinChart: React.FC = () => {
             />
             <span className="input-unit">USD</span>
           </div>
+          
+          <div className="input-group">
+            <label htmlFor="yearsUntilRetirement">Years Until Retirement:</label>
+            <input
+              id="yearsUntilRetirement"
+              type="number"
+              value={retirementInputs.yearsUntilRetirement}
+              onChange={(e) => handleInputChange('yearsUntilRetirement', Math.max(0, parseInt(e.target.value, 10) || 0))}
+              step="1"
+              min="0"
+              max="50"
+              placeholder="0 = retire now"
+              title="When you plan to start retirement (withdrawals). Sets the starting year for the 50-year table and chart projected prices."
+            />
+            <span className="input-unit">years</span>
+          </div>
         </div>
 
         {/* Monthly Savings Component */}
@@ -1215,7 +1234,7 @@ const BitcoinChart: React.FC = () => {
                 )}
                 {monthlySavingsInputs.enabled && savingsProjection.length > 0 && (() => {
                   const currentYear = new Date().getFullYear();
-                  const retirementYear = currentYear + monthlySavingsInputs.yearsToRetirement;
+                  const retirementYear = currentYear + Math.max(retirementInputs.yearsUntilRetirement, monthlySavingsInputs.yearsToRetirement);
                   const retirementDate = new Date(retirementYear, 0, 1);
                   const bitcoinPriceAtRetirement = BitcoinPowerLaw.calculateFairValue(retirementDate);
                   
@@ -1267,8 +1286,15 @@ const BitcoinChart: React.FC = () => {
               {simulationSucceeds ? (
                 <div className="already-retired">
                   <div className="celebration-message">
-                    <h4>🎉 Congratulations! {monthlySavingsInputs.enabled ? `You can retire in ${monthlySavingsInputs.yearsToRetirement} year${monthlySavingsInputs.yearsToRetirement === 1 ? '' : 's'}!` : 'You can retire today!'}</h4>
-                    <p>The 50-year simulation confirms your assets will sustain your retirement with realistic Bitcoin cycles{monthlySavingsInputs.enabled ? ` starting ${new Date().getFullYear() + monthlySavingsInputs.yearsToRetirement}` : ''}!</p>
+                    {(() => {
+                      const effectiveYears = Math.max(retirementInputs.yearsUntilRetirement, monthlySavingsInputs.enabled ? monthlySavingsInputs.yearsToRetirement : 0);
+                      return (
+                        <>
+                          <h4>🎉 Congratulations! {effectiveYears > 0 ? `You can retire in ${effectiveYears} year${effectiveYears === 1 ? '' : 's'}!` : 'You can retire today!'}</h4>
+                          <p>The 50-year simulation confirms your assets will sustain your retirement with realistic Bitcoin cycles{effectiveYears > 0 ? ` starting ${new Date().getFullYear() + effectiveYears}` : ''}!</p>
+                        </>
+                      );
+                    })()}
                   </div>
                   <div className="current-status">
                                           <div className="projection-item">
