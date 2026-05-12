@@ -38,6 +38,9 @@ export interface MonthlySavingsInputs {
 export interface SavingsProjection {
   year: number;
   month: number;
+  date: string;
+  actualYear: number;
+  timestamp: number;
   monthlySavingsAmount: number;
   bitcoinFairValue: number;
   bitcoinCyclePrice: number;

@@ -1,13 +1,23 @@
 import { BitcoinPowerLaw } from '../models/PowerLaw';
 
 export interface WithdrawalDecision {
+  /** Dollars of cash used for this withdrawal. Never greater than available cash. */
   useCashAmount: number;
+  /** BTC sold for this withdrawal. Never greater than available Bitcoin. */
   useBitcoinAmount: number;
+  /** Actual dollars funded by cash + BTC sale at the current price. */
+  fundedWithdrawalAmount: number;
+  /** Dollars not funded because total available assets were insufficient. */
+  withdrawalShortfall: number;
+  /** True only when the requested withdrawal was completely funded. */
+  isFullyFunded: boolean;
   strategy: string;
   reasoning: string;
   fairValueRatio: number;
   recommendedAction: 'HODL_BITCOIN' | 'SPEND_BITCOIN' | 'BALANCED' | 'EMERGENCY_ONLY';
 }
+
+type RawWithdrawalDecision = Omit<WithdrawalDecision, 'fundedWithdrawalAmount' | 'withdrawalShortfall' | 'isFullyFunded'>;
 
 export interface WithdrawalContext {
   currentBitcoinPrice: number;
@@ -20,7 +30,7 @@ export interface WithdrawalContext {
 
 /**
  * Smart Withdrawal Strategy based on Power Law Fair Value Analysis
- * 
+ *
  * Key insights from historical analysis:
  * - Bitcoin spends 54.4% of time below fair value (good time to preserve Bitcoin)
  * - Bitcoin spends 44.5% of time above fair value (good time to spend Bitcoin)
@@ -28,16 +38,16 @@ export interface WithdrawalContext {
  * - Mean reversion tendency over long periods
  */
 export class SmartWithdrawalStrategy {
-  
+
   /**
    * Determine optimal withdrawal strategy based on Power Law position
    */
   static calculateWithdrawal(context: WithdrawalContext): WithdrawalDecision {
-    const { 
-      currentBitcoinPrice, 
-      currentDate, 
-      availableCash, 
-      availableBitcoin, 
+    const {
+      currentBitcoinPrice,
+      currentDate,
+      availableCash,
+      availableBitcoin,
       withdrawalNeeded,
       emergencyMode = false
     } = context;
@@ -46,22 +56,26 @@ export class SmartWithdrawalStrategy {
     const floorValue = BitcoinPowerLaw.calculateFloorPrice(currentDate);
     const upperBound = BitcoinPowerLaw.calculateUpperBound(currentDate);
     const fairValueRatio = currentBitcoinPrice / fairValue;
-    
-    // Emergency mode: use whatever is available
-    if (emergencyMode) {
-      return this.emergencyWithdrawal(context, fairValueRatio);
-    }
 
-    // Determine strategy based on Power Law position
-    return this.calculateOptimalStrategy(
-      fairValueRatio, 
-      currentBitcoinPrice,
-      fairValue,
-      floorValue,
-      upperBound,
+    const rawDecision = emergencyMode
+      ? this.emergencyWithdrawal(context, fairValueRatio)
+      : this.calculateOptimalStrategy(
+        fairValueRatio,
+        currentBitcoinPrice,
+        fairValue,
+        floorValue,
+        upperBound,
+        availableCash,
+        availableBitcoin,
+        withdrawalNeeded
+      );
+
+    return this.normalizeDecision(
+      rawDecision,
       availableCash,
       availableBitcoin,
-      withdrawalNeeded
+      withdrawalNeeded,
+      currentBitcoinPrice
     );
   }
 
@@ -74,8 +88,8 @@ export class SmartWithdrawalStrategy {
     availableCash: number,
     availableBitcoin: number,
     withdrawalNeeded: number
-  ): WithdrawalDecision {
-    
+  ): RawWithdrawalDecision {
+
     // Bitcoin value calculation for potential future use
     // const bitcoinValue = availableBitcoin * currentPrice;
     // const totalAssets = availableCash + bitcoinValue;
@@ -84,36 +98,95 @@ export class SmartWithdrawalStrategy {
     if (fairValueRatio <= 0.5) {
       // Extreme undervaluation (like 2015 crash to 0.42x)
       return this.extremeUndervaluedStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
-      
+
     } else if (fairValueRatio <= 0.8) {
       // Significantly undervalued (common in bear markets)
       return this.undervaluedStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
-      
+
     } else if (fairValueRatio <= 1.2) {
       // Near fair value (±20% - historically 1.1% of time spent exactly at fair value)
       return this.fairValueStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
-      
+
     } else if (fairValueRatio <= 2.5) {
       // Moderately overvalued (common in bull markets)
       return this.overvaluedStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
-      
+
     } else if (fairValueRatio <= 5.0) {
       // Significantly overvalued (bubble territory)
       return this.bubbleStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
-      
+
     } else {
       // Extreme bubble (like 2013's 13x fair value)
       return this.extremeBubbleStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
     }
   }
 
-  private static extremeUndervaluedStrategy(
-    availableCash: number, 
-    availableBitcoin: number, 
-    withdrawalNeeded: number, 
-    fairValueRatio: number,
+  private static normalizeDecision(
+    decision: RawWithdrawalDecision,
+    availableCash: number,
+    availableBitcoin: number,
+    withdrawalNeeded: number,
     currentPrice: number
   ): WithdrawalDecision {
+    const maxCash = Math.max(0, this.safeNumber(availableCash));
+    const maxBitcoin = Math.max(0, this.safeNumber(availableBitcoin));
+    const requestedWithdrawal = Math.max(0, this.safeNumber(withdrawalNeeded));
+    const safePrice = Math.max(0, this.safeNumber(currentPrice));
+
+    let useCashAmount = this.clamp(this.safeNumber(decision.useCashAmount), 0, maxCash);
+    let useBitcoinAmount = this.clamp(this.safeNumber(decision.useBitcoinAmount), 0, maxBitcoin);
+    let fundedWithdrawalAmount = this.calculateFundedAmount(useCashAmount, useBitcoinAmount, safePrice);
+
+    // If the preferred strategy did not fund the whole withdrawal, use any remaining
+    // assets as a fallback. This preserves strategic preference while preventing the
+    // simulator from pretending an underfunded withdrawal was fully paid.
+    if (fundedWithdrawalAmount < requestedWithdrawal && requestedWithdrawal > 0) {
+      const remainingCash = maxCash - useCashAmount;
+      const extraCash = Math.min(remainingCash, requestedWithdrawal - fundedWithdrawalAmount);
+      useCashAmount += extraCash;
+      fundedWithdrawalAmount = this.calculateFundedAmount(useCashAmount, useBitcoinAmount, safePrice);
+    }
+
+    if (fundedWithdrawalAmount < requestedWithdrawal && requestedWithdrawal > 0 && safePrice > 0) {
+      const remainingBitcoin = maxBitcoin - useBitcoinAmount;
+      const extraBitcoin = Math.min(remainingBitcoin, (requestedWithdrawal - fundedWithdrawalAmount) / safePrice);
+      useBitcoinAmount += extraBitcoin;
+      fundedWithdrawalAmount = this.calculateFundedAmount(useCashAmount, useBitcoinAmount, safePrice);
+    }
+
+    // Avoid tiny floating-point dust being displayed as a shortfall.
+    const withdrawalShortfall = Math.max(0, requestedWithdrawal - fundedWithdrawalAmount);
+    const normalizedShortfall = withdrawalShortfall < 0.01 ? 0 : withdrawalShortfall;
+
+    return {
+      ...decision,
+      useCashAmount,
+      useBitcoinAmount,
+      fundedWithdrawalAmount: Math.min(fundedWithdrawalAmount, requestedWithdrawal),
+      withdrawalShortfall: normalizedShortfall,
+      isFullyFunded: normalizedShortfall === 0
+    };
+  }
+
+  private static calculateFundedAmount(cashAmount: number, bitcoinAmount: number, currentPrice: number): number {
+    return this.safeNumber(cashAmount) + (this.safeNumber(bitcoinAmount) * Math.max(0, this.safeNumber(currentPrice)));
+  }
+
+  private static clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+  }
+
+  private static safeNumber(value: number): number {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  private static extremeUndervaluedStrategy(
+    availableCash: number,
+    availableBitcoin: number,
+    withdrawalNeeded: number,
+    fairValueRatio: number,
+    currentPrice: number
+  ): RawWithdrawalDecision {
     // Bitcoin is extremely cheap - preserve it at all costs
     if (availableCash >= withdrawalNeeded) {
       return {
@@ -139,16 +212,16 @@ export class SmartWithdrawalStrategy {
   }
 
   private static undervaluedStrategy(
-    availableCash: number, 
-    availableBitcoin: number, 
-    withdrawalNeeded: number, 
+    availableCash: number,
+    availableBitcoin: number,
+    withdrawalNeeded: number,
     fairValueRatio: number,
     currentPrice: number
-  ): WithdrawalDecision {
+  ): RawWithdrawalDecision {
     // Bitcoin is significantly undervalued - strongly prefer cash
     const cashRatio = Math.min(1.0, availableCash / withdrawalNeeded);
     const preferredCashUsage = withdrawalNeeded * Math.max(0.8, cashRatio); // Use at least 80% cash if available
-    
+
     if (availableCash >= preferredCashUsage) {
       const bitcoinNeeded = Math.max(0, (withdrawalNeeded - preferredCashUsage) / currentPrice);
       return {
@@ -174,22 +247,22 @@ export class SmartWithdrawalStrategy {
   }
 
   private static fairValueStrategy(
-    availableCash: number, 
-    availableBitcoin: number, 
-    withdrawalNeeded: number, 
+    availableCash: number,
+    availableBitcoin: number,
+    withdrawalNeeded: number,
     fairValueRatio: number,
     currentPrice: number
-  ): WithdrawalDecision {
+  ): RawWithdrawalDecision {
     // Near fair value - balanced approach
     const totalValue = availableCash + (availableBitcoin * currentPrice);
     const cashRatio = availableCash / totalValue;
     // Bitcoin ratio calculation for potential future use
     // const bitcoinRatio = 1 - cashRatio;
-    
+
     // Use assets proportionally, but slightly favor cash to maintain Bitcoin exposure
     const preferredCashUsage = Math.min(availableCash, withdrawalNeeded * Math.min(0.6, cashRatio * 1.2));
     const bitcoinUsage = Math.max(0, (withdrawalNeeded - preferredCashUsage) / currentPrice);
-    
+
     return {
       useCashAmount: preferredCashUsage,
       useBitcoinAmount: bitcoinUsage,
@@ -201,15 +274,15 @@ export class SmartWithdrawalStrategy {
   }
 
   private static overvaluedStrategy(
-    availableCash: number, 
-    availableBitcoin: number, 
-    withdrawalNeeded: number, 
+    availableCash: number,
+    availableBitcoin: number,
+    withdrawalNeeded: number,
     fairValueRatio: number,
     currentPrice: number
-  ): WithdrawalDecision {
+  ): RawWithdrawalDecision {
     // Bitcoin is overvalued - prefer to spend Bitcoin
     const bitcoinValue = availableBitcoin * currentPrice;
-    
+
     if (bitcoinValue >= withdrawalNeeded) {
       // Can cover entirely with Bitcoin
       const bitcoinNeeded = withdrawalNeeded / currentPrice;
@@ -225,7 +298,7 @@ export class SmartWithdrawalStrategy {
       // Use significant Bitcoin portion, supplement with cash
       const maxBitcoinUsage = Math.min(availableBitcoin, (withdrawalNeeded * 0.8) / currentPrice);
       const cashNeeded = Math.max(0, withdrawalNeeded - (maxBitcoinUsage * currentPrice));
-      
+
       return {
         useCashAmount: Math.min(availableCash, cashNeeded),
         useBitcoinAmount: maxBitcoinUsage,
@@ -238,15 +311,15 @@ export class SmartWithdrawalStrategy {
   }
 
   private static bubbleStrategy(
-    availableCash: number, 
-    availableBitcoin: number, 
-    withdrawalNeeded: number, 
+    availableCash: number,
+    availableBitcoin: number,
+    withdrawalNeeded: number,
     fairValueRatio: number,
     currentPrice: number
-  ): WithdrawalDecision {
+  ): RawWithdrawalDecision {
     // Bitcoin in bubble territory - aggressively take profits
     const bitcoinNeeded = withdrawalNeeded / currentPrice;
-    
+
     return {
       useCashAmount: 0,
       useBitcoinAmount: Math.min(availableBitcoin, bitcoinNeeded),
@@ -258,15 +331,15 @@ export class SmartWithdrawalStrategy {
   }
 
   private static extremeBubbleStrategy(
-    availableCash: number, 
-    availableBitcoin: number, 
-    withdrawalNeeded: number, 
+    availableCash: number,
+    availableBitcoin: number,
+    withdrawalNeeded: number,
     fairValueRatio: number,
     currentPrice: number
-  ): WithdrawalDecision {
+  ): RawWithdrawalDecision {
     // Extreme bubble like 2013's 13x - maximum profit taking
     const bitcoinNeeded = withdrawalNeeded / currentPrice;
-    
+
     return {
       useCashAmount: 0,
       useBitcoinAmount: Math.min(availableBitcoin, bitcoinNeeded),
@@ -278,12 +351,12 @@ export class SmartWithdrawalStrategy {
   }
 
   private static emergencyWithdrawal(
-    context: WithdrawalContext, 
+    context: WithdrawalContext,
     fairValueRatio: number
-  ): WithdrawalDecision {
+  ): RawWithdrawalDecision {
     const { availableCash, withdrawalNeeded, currentBitcoinPrice } = context;
     // availableBitcoin extracted but not used in current emergency logic
-    
+
     if (availableCash >= withdrawalNeeded) {
       return {
         useCashAmount: withdrawalNeeded,
@@ -310,9 +383,9 @@ export class SmartWithdrawalStrategy {
    * Get strategic recommendations for portfolio rebalancing
    */
   static getRebalancingAdvice(
-    currentPrice: number, 
-    currentDate: Date, 
-    bitcoinHoldings: number, 
+    currentPrice: number,
+    currentDate: Date,
+    bitcoinHoldings: number,
     cashHoldings: number
   ): string {
     const fairValue = BitcoinPowerLaw.calculateFairValue(currentDate);
