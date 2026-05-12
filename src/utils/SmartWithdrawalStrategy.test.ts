@@ -50,9 +50,11 @@ describe('SmartWithdrawalStrategy', () => {
       const r = SmartWithdrawalStrategy.calculateWithdrawal(ctx);
       expect(r).toBeDefined();
       expect(r.recommendedAction).toBeDefined();
-      // With no assets, fairValueStrategy can produce NaN (0/0); caller should validate assets
-      expect(typeof r.useCashAmount).toBe('number');
-      expect(typeof r.useBitcoinAmount).toBe('number');
+      expect(r.useCashAmount).toBe(0);
+      expect(r.useBitcoinAmount).toBe(0);
+      expect(r.fundedWithdrawalAmount).toBe(0);
+      expect(r.withdrawalShortfall).toBe(50000);
+      expect(r.isFullyFunded).toBe(false);
     });
 
     it('withdrawal amount equals useCashAmount + useBitcoinAmount × price when assets suffice', () => {
@@ -66,6 +68,63 @@ describe('SmartWithdrawalStrategy', () => {
       const r = SmartWithdrawalStrategy.calculateWithdrawal(ctx);
       const totalUsed = r.useCashAmount + r.useBitcoinAmount * ctx.currentBitcoinPrice;
       expect(totalUsed).toBeCloseTo(ctx.withdrawalNeeded, 0);
+      expect(r.fundedWithdrawalAmount).toBeCloseTo(ctx.withdrawalNeeded, 0);
+      expect(r.withdrawalShortfall).toBe(0);
+      expect(r.isFullyFunded).toBe(true);
+    });
+
+    it('never sells more Bitcoin than available when assets are insufficient', () => {
+      const price = fairValue * 0.7;
+      const ctx = makeContext({
+        currentBitcoinPrice: price,
+        currentDate: testDate,
+        availableCash: 0,
+        availableBitcoin: 0.05,
+        withdrawalNeeded: 100000
+      });
+      const r = SmartWithdrawalStrategy.calculateWithdrawal(ctx);
+      expect(r.useCashAmount).toBe(0);
+      expect(r.useBitcoinAmount).toBeLessThanOrEqual(ctx.availableBitcoin);
+      expect(r.useBitcoinAmount).toBeCloseTo(ctx.availableBitcoin, 8);
+      expect(r.fundedWithdrawalAmount).toBeCloseTo(ctx.availableBitcoin * price, 2);
+      expect(r.withdrawalShortfall).toBeCloseTo(ctx.withdrawalNeeded - (ctx.availableBitcoin * price), 2);
+      expect(r.isFullyFunded).toBe(false);
+    });
+
+    it('uses cash fallback in bubble zones when Bitcoin cannot fund the full withdrawal', () => {
+      const price = fairValue * 3;
+      const ctx = makeContext({
+        currentBitcoinPrice: price,
+        currentDate: testDate,
+        availableCash: 100000,
+        availableBitcoin: 0.05,
+        withdrawalNeeded: 100000
+      });
+      const r = SmartWithdrawalStrategy.calculateWithdrawal(ctx);
+      expect(r.recommendedAction).toBe('SPEND_BITCOIN');
+      expect(r.useBitcoinAmount).toBeCloseTo(ctx.availableBitcoin, 8);
+      expect(r.useCashAmount).toBeGreaterThan(0);
+      expect(r.fundedWithdrawalAmount).toBeCloseTo(ctx.withdrawalNeeded, 0);
+      expect(r.withdrawalShortfall).toBe(0);
+      expect(r.isFullyFunded).toBe(true);
+    });
+
+    it('reports a shortfall instead of hiding an underfunded overvalued withdrawal', () => {
+      const price = fairValue * 2;
+      const withdrawalNeeded = 100000;
+      const ctx = makeContext({
+        currentBitcoinPrice: price,
+        currentDate: testDate,
+        availableCash: 5000,
+        availableBitcoin: 90000 / price,
+        withdrawalNeeded
+      });
+      const r = SmartWithdrawalStrategy.calculateWithdrawal(ctx);
+      expect(r.useCashAmount).toBe(ctx.availableCash);
+      expect(r.useBitcoinAmount).toBeCloseTo(ctx.availableBitcoin, 8);
+      expect(r.fundedWithdrawalAmount).toBeCloseTo(95000, 0);
+      expect(r.withdrawalShortfall).toBeCloseTo(5000, 0);
+      expect(r.isFullyFunded).toBe(false);
     });
   });
 
