@@ -6,7 +6,8 @@ Use this to guard against miscalculations in the Bear Market Test, 50-year simul
 
 ## 1. Power Law (already in `PowerLaw.test.ts`)
 
-- [x] Fair value = A × (days_since_genesis)^B
+- [x] Fair value = 10 ** (-16.509 + 5.690 × log10(days_since_genesis))
+- [x] Published benchmark regression values cover historical, recent, and retirement-horizon dates
 - [x] Floor = 0.42 × fair value
 - [x] Upper bound = 2 × fair value
 - [x] Floor < fair value < upper bound for any date
