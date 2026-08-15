@@ -11,8 +11,9 @@ import {
 } from 'recharts';
 import { BitcoinAPI } from '../services/BitcoinAPI';
 import { BitcoinPowerLaw } from '../models/PowerLaw';
-import { ChartDataPoint, RetirementInputs, MonthlySavingsInputs, SavingsProjection } from '../types/Bitcoin';
+import { BitcoinQuote, ChartDataPoint, RetirementInputs, MonthlySavingsInputs, SavingsProjection } from '../types/Bitcoin';
 import { SmartWithdrawalStrategy } from '../utils/SmartWithdrawalStrategy';
+import MarketDataStatus from './MarketDataStatus';
 
 
 const BitcoinChart: React.FC = () => {
@@ -23,7 +24,7 @@ const BitcoinChart: React.FC = () => {
   const [currentFairValue, setCurrentFairValue] = useState<number | null>(null);
   const [currentFloorValue, setCurrentFloorValue] = useState<number | null>(null);
   const [currentUpperBound, setCurrentUpperBound] = useState<number | null>(null);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [marketQuote, setMarketQuote] = useState<BitcoinQuote | null>(null);
 
   // Retirement functionality state
   const [retirementInputs, setRetirementInputs] = useState<RetirementInputs>({
@@ -57,42 +58,10 @@ const BitcoinChart: React.FC = () => {
       setLoading(true);
       setError(null);
 
-              // Fetch historical Bitcoin prices from CSV (2012-present) + recent API data
-      const historicalPrices = await BitcoinAPI.getHistoricalDataWithCSV();
-
-              // Get current price from API
-      try {
-        console.log('Fetching current Bitcoin price from API...');
-        const current = await BitcoinAPI.getCurrentPrice();
-        console.log(`Current Bitcoin price from API: $${current.toLocaleString()}`);
-        setCurrentPrice(current);
-      } catch (error) {
-        console.log('API current price failed, trying alternative approach...');
-
-        // Try to get the most recent price from the historical data (could be from API supplement)
-        if (historicalPrices.length > 0) {
-          const latestPrice = historicalPrices[historicalPrices.length - 1].price;
-          setCurrentPrice(latestPrice);
-          console.log(`Using latest historical price: $${latestPrice.toLocaleString()}`);
-        } else {
-          // If no historical data, try a simple fallback API call
-          try {
-            console.log('Trying alternative API endpoint...');
-            const alternativeResponse = await fetch('https://api.coinbase.com/v2/exchange-rates?currency=BTC');
-            const alternativeData = await alternativeResponse.json();
-            const alternativePrice = parseFloat(alternativeData.data.rates.USD);
-            if (!isNaN(alternativePrice)) {
-              setCurrentPrice(alternativePrice);
-              console.log(`Using alternative API price: $${alternativePrice.toLocaleString()}`);
-            }
-          } catch (alternativeError) {
-            console.log('All price sources failed, using Power Law fair value as estimate');
-            const fallbackPrice = BitcoinPowerLaw.calculateFairValue(new Date());
-            setCurrentPrice(fallbackPrice);
-            console.log(`Using Power Law fair value as fallback: $${fallbackPrice.toLocaleString()}`);
-          }
-        }
-      }
+      const marketData = await BitcoinAPI.getMarketData();
+      const historicalPrices = marketData.history;
+      setCurrentPrice(marketData.quote.price);
+      setMarketQuote(marketData.quote);
 
       // Calculate current fair value, floor, and upper bound
       const fairValue = BitcoinPowerLaw.calculateFairValue(new Date());
@@ -177,7 +146,6 @@ const BitcoinChart: React.FC = () => {
       }
 
       setChartData(filteredData);
-      setLastUpdated(new Date());
     } catch (err) {
       console.error('Error loading chart data:', err);
       setError('Failed to load chart data. Please try again.');
@@ -886,15 +854,7 @@ const BitcoinChart: React.FC = () => {
     <div className="chart-container">
       <div className="chart-header">
         <h2>Bitcoin Price and Power Law Model</h2>
-        {lastUpdated && (
-          <div style={{
-            fontSize: '12px',
-            color: '#999',
-            marginBottom: '10px'
-          }}>
-            Last updated: {lastUpdated.toLocaleString()}
-          </div>
-        )}
+        {marketQuote && <MarketDataStatus quote={marketQuote} />}
         {currentPrice && currentFairValue && currentFloorValue && currentUpperBound && (
           <div className="current-stats">
             <div className="stat">

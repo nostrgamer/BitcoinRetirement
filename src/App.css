@@ -76,6 +76,36 @@ main {
   font-size: 1.8rem;
 }
 
+.market-data-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  margin: 0 auto 14px;
+  color: #c8c8c8;
+  font-size: 0.85rem;
+}
+
+.market-data-badge {
+  border: 1px solid #2ed573;
+  border-radius: 999px;
+  color: #2ed573;
+  font-weight: 700;
+  padding: 3px 9px;
+}
+
+.market-data-status--cached .market-data-badge,
+.market-data-status--fallback .market-data-badge {
+  border-color: #f7b731;
+  color: #f7b731;
+}
+
+.market-data-warning {
+  flex-basis: 100%;
+  color: #f7b731;
+}
+
 /* Current Stats Styles */
 .current-stats {
   display: flex;
@@ -842,4 +872,3 @@ main {
 
 
 
- 
