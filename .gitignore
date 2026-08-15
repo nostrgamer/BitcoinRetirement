@@ -5,6 +5,10 @@ node_modules/
 
 # Production
 /build
+.netlify/
+deno.lock
+playwright-report/
+test-results/
 
 # Large data files (prevent accidental inclusion)
 *.csv.large
@@ -30,4 +34,4 @@ yarn-error.log*
 *.swo
 
 # OS
-Thumbs.db 
+Thumbs.db

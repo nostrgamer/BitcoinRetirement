@@ -4,6 +4,33 @@ export interface BitcoinPriceData {
   timestamp: number;
 }
 
+export type MarketDataStatus = 'live' | 'cached' | 'fallback';
+
+export interface BitcoinQuote {
+  price: number;
+  observedAt: number;
+  source: string;
+  status: MarketDataStatus;
+  stale: boolean;
+}
+
+export interface SameOriginMarketDataResponse {
+  current: {
+    price: number;
+    observedAt: number;
+    source: string;
+    status: MarketDataStatus;
+  } | null;
+  history: BitcoinPriceData[];
+  servedAt: number;
+  status: MarketDataStatus | 'partial';
+}
+
+export interface MarketDataResult {
+  history: BitcoinPriceData[];
+  quote: BitcoinQuote;
+}
+
 export interface PowerLawData {
   date: string;
   fairValue: number;
@@ -66,4 +93,4 @@ export interface RetirementStatus {
   retirementDataPoint?: ChartDataPoint;
   riskLevel?: string;
   powerLawMetrics?: PowerLawMetrics;
-} 
+}
