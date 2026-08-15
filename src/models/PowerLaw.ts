@@ -1,19 +1,22 @@
 // Bitcoin Genesis Block timestamp: January 3, 2009, 18:15:05 UTC
 const BITCOIN_GENESIS_TIMESTAMP = 1231006505000; // milliseconds
 
-// Power Law parameters - User's formula
-// Formula: Price = A × (days_since_genesis)^B
-const POWER_LAW_A = 1.01e-17; // Coefficient: 1.01E-17
-const POWER_LAW_B = 5.82; // Exponent: 5.82
+// Published Santostasi/Perrenod 2026 benchmark (base-10 logarithms).
+// Formula: log10 P(t) = -16.509 + 5.690 log10(t)
+const POWER_LAW_INTERCEPT = -16.509;
+const POWER_LAW_EXPONENT = 5.690;
 
 export class BitcoinPowerLaw {
   /**
    * Calculate the power law fair value for a given date
-   * Formula: Price = A × (days_since_genesis)^B
+   * Formula: P(t) = 10 ** (-16.509 + 5.690 * log10(days_since_genesis))
    */
   static calculateFairValue(date: Date): number {
     const daysSinceGenesis = this.getDaysSinceGenesis(date);
-    const fairValue = POWER_LAW_A * Math.pow(daysSinceGenesis, POWER_LAW_B);
+    const fairValue = Math.pow(
+      10,
+      POWER_LAW_INTERCEPT + POWER_LAW_EXPONENT * Math.log10(daysSinceGenesis)
+    );
     return fairValue;
   }
 
@@ -83,4 +86,4 @@ export class BitcoinPowerLaw {
     const fairValue = this.calculateFairValue(date);
     return currentPrice / fairValue;
   }
-} 
+}

@@ -43,12 +43,15 @@ describe('BitcoinPowerLaw', () => {
       expect(price).toBeLessThan(500000);
     });
     
-    it('should use correct power law formula', () => {
-      const testDate = new Date('2020-01-01');
-      const days = BitcoinPowerLaw.getDaysSinceGenesis(testDate);
-      const expectedPrice = 1.01e-17 * Math.pow(days, 5.82);
-      const actualPrice = BitcoinPowerLaw.calculateFairValue(testDate);
-      expect(actualPrice).toBeCloseTo(expectedPrice, 2);
+    it.each([
+      // Independently calculated from log10 P(t) = -16.509 + 5.690 log10(t),
+      // using the Genesis timestamp and the exact UTC timestamps below.
+      ['2020 historical benchmark', '2020-01-01T00:00:00Z', 9896.979694986774],
+      ['2026 recent benchmark', '2026-08-15T00:00:00Z', 144737.46632259173],
+      ['2045 retirement-horizon benchmark', '2045-01-01T00:00:00Z', 8452414.136315675],
+    ])('should match the Santostasi/Perrenod 2026 %s', (_label, timestamp, expectedPrice) => {
+      const actualPrice = BitcoinPowerLaw.calculateFairValue(new Date(timestamp));
+      expect(actualPrice / expectedPrice).toBeCloseTo(1, 12);
     });
   });
   
@@ -171,4 +174,4 @@ describe('BitcoinPowerLaw', () => {
       expect(floorPrice).toBeCloseTo(fairValue * 0.42, 2);
     });
   });
-}); 
+});

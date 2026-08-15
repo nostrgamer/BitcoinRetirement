@@ -902,7 +902,7 @@ const BitcoinChart: React.FC = () => {
               <span className="stat-value">{formatPrice(currentPrice)}</span>
             </div>
             <div className="stat">
-              <span className="stat-label">Fair Value (Power Law):</span>
+              <span className="stat-label">Published 2026 Power Law:</span>
               <span className="stat-value">{formatPrice(currentFairValue)}</span>
             </div>
             <div className="stat">
@@ -979,7 +979,7 @@ const BitcoinChart: React.FC = () => {
               strokeWidth={2}
               dot={false}
               strokeDasharray="5 5"
-              name="Power Law Fair Value"
+              name="Published Santostasi/Perrenod 2026"
             />
             <Line
               type="monotone"

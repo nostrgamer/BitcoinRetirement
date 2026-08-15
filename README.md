@@ -43,16 +43,20 @@ This application is designed with Bitcoin privacy principles in mind:
 
 ## Power Law Model
 
-The calculator uses Bitcoin's Power Law model, which suggests that Bitcoin's price follows a mathematical relationship with time:
+The calculator's central curve uses the published Santostasi/Perrenod 2026 Bitcoin power-law benchmark:
 
 ```
-Price = A × (days_since_genesis)^B
+log10 P(t) = -16.509 + 5.690 log10(t)
 ```
 
 Where:
-- A = 1.01 × 10^-17 (coefficient)
-- B = 5.82 (exponent)
-- days_since_genesis is calculated from Bitcoin's genesis block (January 3, 2009)
+- `P(t)` is the benchmark Bitcoin price in USD
+- `t` is Bitcoin age in days from the Genesis timestamp (January 3, 2009, 18:15:05 UTC)
+- logarithms are base 10
+
+The equivalent implementation is `P(t) = 10 ** (-16.509 + 5.690 * log10(t))`.
+The 2026 benchmark supersedes the historical `1.01 × 10^-17 × t^5.82` curve
+previously used by this application.
 
 Additional levels:
 - **Floor Price**: 42% of fair value (support level)
@@ -66,7 +70,7 @@ For planning purposes, the app assumes a **true worst case** that stays within t
 - **Above 2×:** Prolonged euphoria is not a withdrawal risk; the risk is the drawdown after. The 50-year simulation uses cycle phases that can include years near 2×.
 - **After the bear:** The retiree must still have **at least 20 years of runway** at fair value after surviving the 2-year floor + 1-year recovery.
 
-So a retiree is prepared for: **2 years at floor → 1 year recovery → 20+ years at fair value.** No change to the Power Law formula is required for that scenario.
+So a retiree is prepared for: **2 years at floor → 1 year recovery → 20+ years at fair value.** These planning heuristics are applied to the published central curve; they are not part of the published equation itself.
 
 ## Getting Started
 
