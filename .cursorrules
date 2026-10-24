@@ -1,32 +1,9 @@
 # Cursor Rules for Bitcoin Retirement Calculator
 
 ## Project Structure
-```
-BitcoinRetire/
-├── .cursorrules
-├── .gitignore
-├── package.json
-├── package-lock.json
-├── tsconfig.json
-├── README.md
-├── public/
-│   ├── index.html
-│   └── bitcoin-historical-data.csv  (SINGLE source - 2012 to present)
-├── src/
-│   ├── index.tsx
-│   ├── index.css
-│   ├── App.tsx
-│   ├── App.css
-│   ├── components/
-│   │   └── BitcoinChart.tsx
-│   ├── services/
-│   │   └── BitcoinAPI.ts
-│   ├── models/
-│   │   └── PowerLaw.ts
-│   └── types/
-│       └── Bitcoin.ts
-└── node_modules/
-```
+See the "Project structure" section of README.md. Key rules:
+- Retirement math lives in `src/simulation/` and `src/models/` (pure functions, unit tested); components only render.
+- Prices for withdrawals, purchases and valuation come only from `src/models/PricePath.ts`.
 
 ## File Organization & Duplication Prevention
 - NEVER create duplicate data files
@@ -36,17 +13,17 @@ BitcoinRetire/
 - Use imports/references instead of copying data
 
 ## Data Management
-- Keep ONE master CSV file: `bitcoin-historical-data.csv` in `/public` folder (DAILY data from 2012-2025)
-- This CSV is derived from 1-minute historical data and contains thousands of daily price points
+- Keep ONE master CSV file: `bitcoin-historical-data.csv` in `/public` folder (daily closes from 2012 onward)
+- Extend it only with `node scripts/refresh-history.mjs`, which also regenerates the function baseline and `src/models/historicalStats.json`
 - NO additional data files like `bitcoin-daily-data.csv` or `bitcoinData.csv`
 - Use fetch() to load data from public folder
 - NO hardcoded data arrays in components
-- APIs are ONLY for supplementing recent data (last few days/weeks), NOT for historical data
+- The same-origin function only bridges the gap between the CSV's last date and today, NOT older history
 - Historical CSV is the foundation, APIs are supplements only
 
 ## API Usage
-- HISTORICAL DATA: Use comprehensive CSV file (2012-2025 daily data)
-- RECENT DATA: APIs supplement CSV for last few days/weeks only
+- HISTORICAL DATA: Use the bundled CSV (2012 onward, daily)
+- RECENT DATA: `/api/bitcoin-data` (Coinbase via Netlify function) fills the gap after the CSV
 - Never replace historical CSV data with API data
 - APIs have limited historical range (365 days max typically)
 - Always handle CORS issues properly

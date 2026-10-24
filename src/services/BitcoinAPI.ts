@@ -146,6 +146,8 @@ export class BitcoinAPI {
       };
     }
 
-    return { history, quote };
+    // Without the function (local dev, outage) the bundled CSV is all we have; only flag gaps the server reports.
+    const historyComplete = remote?.coverage ? remote.coverage.complete === true : true;
+    return { history, quote, historyComplete };
   }
 }

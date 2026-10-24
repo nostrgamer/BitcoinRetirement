@@ -1,158 +1,139 @@
 # Bitcoin Retirement Calculator
 
-A comprehensive retirement planning tool that uses Bitcoin's Power Law model to help you plan for financial independence. Calculate retirement timelines, analyze portfolio sustainability, and optimize your Bitcoin accumulation strategy.
+A retirement planning tool built on Bitcoin's Power Law. Enter your Bitcoin, cash and annual spending, and the calculator tests whether your assets fund 50 years of withdrawals through a deliberately harsh opening stretch.
 
 ## Features
 
-### Power Law Analysis
-- **Interactive Bitcoin Chart**: Historical price data from 2012 with Power Law overlay
-- **Fair Value Analysis**: Shows current Bitcoin price relative to mathematical fair value
-- **Support & Resistance**: Displays Power Law floor (support) and upper bound (resistance) levels
-- **Future Projections**: 8-year Power Law projections for long-term planning
+### Power Law chart
+- **Price history** from 2012 to today with the Power Law fair value, floor (0.42×) and upper bound (2×)
+- **Live quote** from Coinbase, with the data source and age shown next to the price
+- **Projection** far enough ahead to cover your whole retirement, with your stress path drawn on the chart
 
-### Retirement Planning
-- **Portfolio Input**: Enter your Bitcoin holdings, cash reserves, and annual expenses
-- **Withdrawal Simulation**: 50-year Monte Carlo-style simulation using realistic Bitcoin cycles
-- **Retirement Timeline**: Calculate when you can achieve financial independence
+### Retirement test
+- **Inputs:** Bitcoin holdings, cash, annual withdrawal, years until retirement
+- **50-year verdict:** every annual withdrawal must be fully funded on the stress path (below)
+- **Floor-forever stress line:** how many years your assets would last if Bitcoin stayed at the floor every year
+- **Historical what-if:** the first year your *current* holdings would have passed the same test
+- **Smart withdrawals:** cash is spent first when Bitcoin is cheap relative to fair value, and Bitcoin is sold when it isn't
 
-### Savings Strategy
-- **Monthly Savings Projection**: Model Bitcoin accumulation over time
-- **Bear Market Strategy**: Optional 2x savings during bear markets for accelerated growth
-- **Cycle-Aware Pricing**: Uses realistic Bitcoin cycle prices for accurate projections
-- **Real-Time Updates**: Live Bitcoin price integration for current analysis
+### Monthly savings
+- Optional monthly purchases until retirement, bought at the Power Law fair value each month
 
-## Privacy & Data Storage
+## The model
 
-**Your Privacy is Protected**
-
-This application is designed with Bitcoin privacy principles in mind:
-
-- **No Data Storage**: Your inputs are never stored, saved, or transmitted to any server
-- **Client-Side Only**: All calculations happen locally in your browser
-- **No User Tracking**: No analytics, cookies, or user tracking of any kind
-- **No Personal Data**: The app doesn't collect, store, or transmit any personal information
-- **Works Offline**: Once loaded, the app works without internet (except for live price updates)
-- **Open Source**: Full transparency - you can verify the code yourself
-
-**What Data is Used:**
-- Historical Bitcoin price data (included in the app, publicly available)
-- Current Bitcoin price (fetched from CoinGecko API for display only)
-- Your inputs (Bitcoin holdings, expenses) - processed locally, never transmitted
-
-**Your financial information stays on your device and is never shared.**
-
-## Power Law Model
-
-The calculator's central curve uses the published Santostasi/Perrenod 2026 Bitcoin power-law benchmark:
+### Power Law
+The central curve is the published Santostasi/Perrenod 2026 benchmark:
 
 ```
 log10 P(t) = -16.509 + 5.690 log10(t)
 ```
 
-Where:
 - `P(t)` is the benchmark Bitcoin price in USD
-- `t` is Bitcoin age in days from the Genesis timestamp (January 3, 2009, 18:15:05 UTC)
-- logarithms are base 10
+- `t` is days since the Genesis block (January 3, 2009, 18:15:05 UTC)
 
-The equivalent implementation is `P(t) = 10 ** (-16.509 + 5.690 * log10(t))`.
-The 2026 benchmark supersedes the historical `1.01 × 10^-17 × t^5.82` curve
-previously used by this application.
+Bands: **floor** = 0.42 × fair value, **upper bound** = 2 × fair value.
 
-Additional levels:
-- **Floor Price**: 42% of fair value (support level)
-- **Upper Bound**: 200% of fair value (resistance level)
+### Withdrawals: the stress path
 
-### Retirement worst case (within Power Law)
+| Retirement year | Bitcoin price used |
+|---|---|
+| 1–3 | Floor (0.42 × fair value) |
+| 4 | Recovery (0.855 × fair value, 75% of the way from floor to fair value) |
+| 5–50 | 0.76 × fair value (the median price-to-fair-value ratio from 2012 through September 2026) |
 
-For planning purposes, the app assumes a **true worst case** that stays within the Power Law band:
+No retirement year is priced above fair value. Retirement starts on the first of next month, plus the years until retirement (set 0 years on 24 October and retirement starts 1 November). Each retirement year has one withdrawal, taken on its first day to cover the next 12 months and priced at that date's fair value times the ratio above.
 
-- **Below floor:** We plan for **2 consecutive years** of withdrawals at the Power Law floor (0.42× fair value). That is the worst-case duration we treat as still “within bounds” of the model (longer would start to challenge the Power Law).
-- **Above 2×:** Prolonged euphoria is not a withdrawal risk; the risk is the drawdown after. The 50-year simulation uses cycle phases that can include years near 2×.
-- **After the bear:** The retiree must still have **at least 20 years of runway** at fair value after surviving the 2-year floor + 1-year recovery.
+The first years matter most: on this path roughly 80% of all the Bitcoin a retiree ever sells goes in the first five years, when prices are lowest. That's why the path opens with three floor years.
 
-So a retiree is prepared for: **2 years at floor → 1 year recovery → 20+ years at fair value.** These planning heuristics are applied to the published central curve; they are not part of the published equation itself.
+### Savings
+Monthly savings buy Bitcoin at that month's fair value, on the first of each month from next month until retirement starts: 12 purchases per year of saving.
 
-## Getting Started
+### Scope
+- No taxes are modeled.
+- Cash earns nothing.
+- The stress path is a planning rule, not a forecast.
+
+## Privacy
+
+- **No data storage:** your inputs are never saved or sent anywhere
+- **Client-side only:** all calculations run in your browser
+- **No tracking:** no analytics, no cookies
+- **Open source:** you can verify all of this in the code
+
+**Data the app uses:**
+- Historical Bitcoin prices, bundled with the app (`public/bitcoin-historical-data.csv`)
+- The current price and recent daily closes from Coinbase, fetched through the site's own `/api/bitcoin-data` function, so your browser contacts no third party
+- Your inputs, processed locally and never transmitted
+
+## Getting started
 
 ### Prerequisites
+- Node.js 22
+- npm
 
-- Node.js (version 16 or higher)
-- npm or yarn
-
-### Installation
-
-1. Clone the repository:
+### Install and run
 ```bash
 git clone https://github.com/nostrgamer/BitcoinRetirement.git
 cd BitcoinRetirement
-```
-
-2. Install dependencies:
-```bash
-npm install
-```
-
-3. Start the development server:
-```bash
+npm ci
 npm start
 ```
+Open [http://localhost:3000](http://localhost:3000). Without the Netlify function running, the app uses the bundled price history.
 
-4. Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
-
-### Building for Production
-
+### Production build
 ```bash
 npm run build
 ```
+Deploys to Netlify as configured in `netlify.toml` (static site + `netlify/functions/bitcoin-data.js`).
 
-The build folder will be ready for deployment to any static hosting service.
+### Refreshing the price history
+The bundled CSV is extended from Coinbase daily closes. Run this roughly once a year:
+```bash
+node scripts/refresh-history.mjs
+```
+It appends closes through the last full month, then regenerates `netlify/functions/lib/baseline.js` (which tells the function how far back to fetch) and `src/models/historicalStats.json` (the historical figures shown in the app). The function can bridge up to four 290-day windows (about 3 years) past the CSV; beyond that the app shows "Price history incomplete".
 
-## Technology Stack
+## Testing
 
-- **React 18** with TypeScript for type safety
-- **Recharts** for interactive data visualization
-- **CoinGecko API** for real-time Bitcoin price data
-- **CSV Data** for comprehensive historical price data (2012-present)
+All verification runs locally:
+```bash
+./VERIFY.sh            # npm ci, type check, unit tests, build, Playwright
+./VERIFY.sh --skip-install
+```
+Set `PLAYWRIGHT_PORT` if port 3210 is taken. The Playwright suite includes a golden test (`golden/v2-stress-path.json`) that locks the full 50-year table for 20 scenarios at a pinned date. Any change to those numbers has to be deliberate.
 
-## Project Structure
+## Project structure
 
 ```
 src/
 ├── components/
-│   └── BitcoinChart.tsx     # Main chart and retirement calculator
+│   ├── BitcoinChart.tsx          # Page: composes the pieces below
+│   ├── PriceChart.tsx            # Stats header + Power Law chart + stress-path line
+│   ├── RetirementInputsPanel.tsx # Inputs, validation messages, savings
+│   ├── RetirementAnalysis.tsx    # Verdict, floor-forever line, what-if, assets
+│   ├── WithdrawalTable.tsx       # Year-by-year table
+│   └── MarketDataStatus.tsx      # Quote source / freshness badge
+├── hooks/
+│   ├── useMarketData.ts          # Loads and refreshes price data
+│   └── useRetirementPlan.ts      # Inputs → validated plan
 ├── models/
-│   └── PowerLaw.ts          # Power Law calculations and projections
-├── services/
-│   └── BitcoinAPI.ts        # API service for Bitcoin data
-├── types/
-│   └── Bitcoin.ts           # TypeScript interfaces
-├── App.tsx                  # Main app component
-└── index.tsx               # App entry point
-public/
-└── bitcoin-historical-data.csv  # Historical price data (2012-present)
+│   ├── PowerLaw.ts               # Power Law curve and bands
+│   ├── PricePath.ts              # Stress path, purchase and valuation prices
+│   └── historicalStats.json      # Generated historical figures
+├── simulation/
+│   ├── retirementPlan.ts         # Savings projection + 50-year simulation
+│   └── validation.ts             # Input validation
+├── services/BitcoinAPI.ts        # Bundled CSV + /api/bitcoin-data
+└── utils/                        # Withdrawal strategy, formatting
+netlify/functions/                # Same-origin Coinbase proxy
+scripts/refresh-history.mjs       # Price history refresh
+public/bitcoin-historical-data.csv
 ```
-
-## Testing
-
-Run the test suite:
-```bash
-npm test
-```
-
-The project includes comprehensive tests for:
-- Power Law mathematical accuracy
-- Retirement calculation business logic
-- Bear market survival scenarios
-- Monthly savings projections
 
 ## License
 
-This project is open source and available under the [MIT License](LICENSE).
-
-**Verify the Code**: As a privacy-focused tool for Bitcoiners, you can inspect the source code to verify that no user data is collected or transmitted. The code is fully transparent and auditable.
+Free and open source software, released under the [MIT License](LICENSE).
 
 ## Disclaimer
 
-This tool is for educational and informational purposes only. It does not constitute financial advice. Always consult with a qualified financial advisor before making investment decisions.
-
-**Privacy Notice**: This application does not store, transmit, or share any of your personal or financial information. All calculations are performed locally in your browser to protect your privacy. 
+This tool is for educational and informational purposes only and is not financial advice.

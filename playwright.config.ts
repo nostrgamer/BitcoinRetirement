@@ -6,6 +6,8 @@ const launchOptions = fs.existsSync(chromiumExecutable)
   ? { executablePath: chromiumExecutable }
   : undefined;
 
+const port = process.env.PLAYWRIGHT_PORT || '3100';
+
 export default defineConfig({
   testDir: './e2e',
   timeout: 30_000,
@@ -13,13 +15,15 @@ export default defineConfig({
     timeout: 10_000
   },
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3100',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || `http://127.0.0.1:${port}`,
     trace: 'on-first-retry',
+    // Golden tables and fixtures assume UTC; the app computes dates in the viewer's local time.
+    timezoneId: 'UTC',
     launchOptions
   },
   webServer: process.env.PLAYWRIGHT_SKIP_WEBSERVER ? undefined : {
-    command: 'BROWSER=none HOST=127.0.0.1 PORT=3100 npm start',
-    url: 'http://127.0.0.1:3100',
+    command: `BROWSER=none HOST=127.0.0.1 PORT=${port} npm start`,
+    url: `http://127.0.0.1:${port}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000
   },

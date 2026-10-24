@@ -24,17 +24,18 @@ export interface SameOriginMarketDataResponse {
   history: BitcoinPriceData[];
   servedAt: number;
   status: MarketDataStatus | 'partial';
+  coverage?: {
+    from: string | null;
+    to: string | null;
+    complete: boolean;
+  };
 }
 
 export interface MarketDataResult {
   history: BitcoinPriceData[];
   quote: BitcoinQuote;
-}
-
-export interface PowerLawData {
-  date: string;
-  fairValue: number;
-  timestamp: number;
+  /** False when the server reported a gap between the bundled history and today. */
+  historyComplete: boolean;
 }
 
 export interface ChartDataPoint {
@@ -44,53 +45,6 @@ export interface ChartDataPoint {
   powerLawFloor: number;
   powerLawUpperBound: number;
   timestamp: number;
-  /** Projected price from 50-year withdrawal plan (when retirement inputs are set) */
+  /** Price on the retirement stress path for this point's calendar year (when retirement inputs are valid) */
   withdrawalPlanPrice?: number | null;
-}
-
-export interface RetirementInputs {
-  bitcoinAmount: number;
-  cashAmount: number;
-  annualWithdrawal: number;
-  yearsUntilRetirement: number;
-}
-
-export interface MonthlySavingsInputs {
-  monthlySavingsAmount: number;
-  yearsToRetirement: number;
-  enabled: boolean;
-  doubleDownInBearMarkets: boolean;
-}
-
-export interface SavingsProjection {
-  year: number;
-  month: number;
-  date: string;
-  actualYear: number;
-  timestamp: number;
-  monthlySavingsAmount: number;
-  bitcoinFairValue: number;
-  bitcoinCyclePrice: number;
-  bitcoinPurchased: number;
-  totalBitcoinAccumulated: number;
-  totalCashInvested: number;
-}
-
-export interface PowerLawMetrics {
-  fairValueRatio: number;
-  floorRatio: number;
-  ceilingRatio: number;
-  fairValue: number;
-  floorValue: number;
-  ceilingValue: number;
-}
-
-export interface RetirementStatus {
-  canRetire: boolean;
-  totalAssets: number;
-  safeWithdrawalRate: number;
-  retirementDate?: string;
-  retirementDataPoint?: ChartDataPoint;
-  riskLevel?: string;
-  powerLawMetrics?: PowerLawMetrics;
 }
