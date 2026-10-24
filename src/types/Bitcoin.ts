@@ -24,11 +24,18 @@ export interface SameOriginMarketDataResponse {
   history: BitcoinPriceData[];
   servedAt: number;
   status: MarketDataStatus | 'partial';
+  coverage?: {
+    from: string | null;
+    to: string | null;
+    complete: boolean;
+  };
 }
 
 export interface MarketDataResult {
   history: BitcoinPriceData[];
   quote: BitcoinQuote;
+  /** False when the server reported a gap between the bundled history and today. */
+  historyComplete: boolean;
 }
 
 export interface PowerLawData {

@@ -1,8 +1,11 @@
 'use strict';
 
+const { BASELINE_END_MS } = require('./baseline');
+
 const COINBASE_BASE_URL = 'https://api.exchange.coinbase.com';
 const HISTORY_WINDOW_DAYS = 290;
-const HISTORY_WINDOW_COUNT = 3;
+const MAX_HISTORY_WINDOWS = 4;
+const HISTORY_BUDGET_MS = 8000; // stay well inside the Netlify function time limit
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MAX_PRICE = 10000000;
 
@@ -51,8 +54,13 @@ function normalizeCandles(payload, nowMs) {
   return Array.from(byTimestamp.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
-function historyUrls(nowMs) {
-  return Array.from({ length: HISTORY_WINDOW_COUNT }, (_, index) => {
+// Number of 290-day windows needed to cover everything after the bundled CSV baseline.
+function windowsNeeded(nowMs, baselineEndMs) {
+  return Math.max(1, Math.ceil((nowMs - baselineEndMs) / (HISTORY_WINDOW_DAYS * DAY_MS)));
+}
+
+function historyUrls(nowMs, count) {
+  return Array.from({ length: count }, (_, index) => {
     const end = new Date(nowMs - index * HISTORY_WINDOW_DAYS * DAY_MS);
     const start = new Date(end.getTime() - HISTORY_WINDOW_DAYS * DAY_MS);
     const query = new URLSearchParams({
@@ -64,17 +72,39 @@ function historyUrls(nowMs) {
   });
 }
 
-async function fetchCoinbaseData({ fetchImpl = fetch, nowMs = Date.now(), timeoutMs = 4500 } = {}) {
-  const tickerPromise = fetchJson(fetchImpl, `${COINBASE_BASE_URL}/products/BTC-USD/ticker`, timeoutMs);
-  const candlePromises = historyUrls(nowMs).map(url => fetchJson(fetchImpl, url, timeoutMs));
-  const [tickerResult, ...candleResults] = await Promise.allSettled([tickerPromise, ...candlePromises]);
+async function fetchCoinbaseData({
+  fetchImpl = fetch,
+  nowMs = Date.now(),
+  timeoutMs = 4500,
+  baselineEndMs = BASELINE_END_MS,
+  budgetMs = HISTORY_BUDGET_MS
+} = {}) {
+  const startedAt = Date.now();
+  const tickerPromise = fetchJson(fetchImpl, `${COINBASE_BASE_URL}/products/BTC-USD/ticker`, timeoutMs)
+    .then(value => ({ status: 'fulfilled', value }), reason => ({ status: 'rejected', reason }));
 
-  const current = tickerResult.status === 'fulfilled' ? normalizeTicker(tickerResult.value, nowMs) : null;
+  const needed = windowsNeeded(nowMs, baselineEndMs);
+  const urls = historyUrls(nowMs, Math.min(needed, MAX_HISTORY_WINDOWS));
   const byTimestamp = new Map();
-  candleResults.forEach(result => {
-    if (result.status !== 'fulfilled') return;
-    normalizeCandles(result.value, nowMs).forEach(item => byTimestamp.set(item.timestamp, item));
-  });
+  let allWindowsOk = needed <= MAX_HISTORY_WINDOWS;
+
+  // Sequential, newest window first, so a slow upstream costs at most one timeout per window.
+  for (const url of urls) {
+    if (Date.now() - startedAt > budgetMs) {
+      allWindowsOk = false;
+      break;
+    }
+    try {
+      const candles = normalizeCandles(await fetchJson(fetchImpl, url, timeoutMs), nowMs);
+      if (candles.length === 0) allWindowsOk = false;
+      candles.forEach(item => byTimestamp.set(item.timestamp, item));
+    } catch {
+      allWindowsOk = false;
+    }
+  }
+
+  const tickerResult = await tickerPromise;
+  const current = tickerResult.status === 'fulfilled' ? normalizeTicker(tickerResult.value, nowMs) : null;
   const history = Array.from(byTimestamp.values()).sort((a, b) => a.timestamp - b.timestamp);
 
   let fallbackCurrent = current;
@@ -92,13 +122,19 @@ async function fetchCoinbaseData({ fetchImpl = fetch, nowMs = Date.now(), timeou
     current: fallbackCurrent,
     history,
     servedAt: nowMs,
-    status: current && history.length > 0 ? 'live' : fallbackCurrent || history.length > 0 ? 'partial' : 'fallback'
+    status: current && history.length > 0 ? 'live' : fallbackCurrent || history.length > 0 ? 'partial' : 'fallback',
+    coverage: {
+      from: history.length > 0 ? history[0].date : null,
+      to: history.length > 0 ? history[history.length - 1].date : null,
+      complete: allWindowsOk && history.length > 0
+    }
   };
 }
 
 module.exports = {
   fetchCoinbaseData,
   historyUrls,
+  windowsNeeded,
   normalizeCandles,
   normalizeTicker
 };

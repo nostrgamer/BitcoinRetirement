@@ -7,7 +7,7 @@ export const marketDataStatusLabel = (quote: BitcoinQuote): string => {
   return 'Fallback historical quote';
 };
 
-const MarketDataStatus: React.FC<{ quote: BitcoinQuote }> = ({ quote }) => (
+const MarketDataStatus: React.FC<{ quote: BitcoinQuote; historyComplete?: boolean }> = ({ quote, historyComplete = true }) => (
   <div className={`market-data-status market-data-status--${quote.status}`} role="status">
     <span className="market-data-badge">{marketDataStatusLabel(quote)}</span>
     <span>
@@ -16,6 +16,11 @@ const MarketDataStatus: React.FC<{ quote: BitcoinQuote }> = ({ quote }) => (
     {quote.stale && (
       <span className="market-data-warning">
         Fresh market data is unavailable; calculations remain usable with the labeled observation above.
+      </span>
+    )}
+    {!historyComplete && (
+      <span className="market-data-warning">
+        Price history incomplete: some recent days could not be loaded, so the chart may show a gap.
       </span>
     )}
   </div>

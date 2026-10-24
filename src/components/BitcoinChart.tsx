@@ -32,6 +32,7 @@ const BitcoinChart: React.FC = () => {
   const [currentFloorValue, setCurrentFloorValue] = useState<number | null>(null);
   const [currentUpperBound, setCurrentUpperBound] = useState<number | null>(null);
   const [marketQuote, setMarketQuote] = useState<BitcoinQuote | null>(null);
+  const [historyComplete, setHistoryComplete] = useState<boolean>(true);
 
   // Retirement functionality state
   const [retirementInputs, setRetirementInputs] = useState<RetirementInputs>({
@@ -67,6 +68,7 @@ const BitcoinChart: React.FC = () => {
       const historicalPrices = marketData.history;
       setCurrentPrice(marketData.quote.price);
       setMarketQuote(marketData.quote);
+      setHistoryComplete(marketData.historyComplete);
 
       // Calculate current fair value, floor, and upper bound
       const fairValue = BitcoinPowerLaw.calculateFairValue(new Date());
@@ -288,7 +290,7 @@ const BitcoinChart: React.FC = () => {
     <div className="chart-container">
       <div className="chart-header">
         <h2>Bitcoin Price and Power Law Model</h2>
-        {marketQuote && <MarketDataStatus quote={marketQuote} />}
+        {marketQuote && <MarketDataStatus quote={marketQuote} historyComplete={historyComplete} />}
         {currentPrice && currentFairValue && currentFloorValue && currentUpperBound && (
           <div className="current-stats">
             <div className="stat">
