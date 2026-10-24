@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BitcoinPowerLaw } from '../models/PowerLaw';
-import { withdrawalPrice } from '../models/PricePath';
+import { monthLabel, retirementYearStart, withdrawalPrice } from '../models/PricePath';
 import { RETIREMENT_YEARS, RetirementPlan } from '../simulation/retirementPlan';
 import { BitcoinPriceData, BitcoinQuote, ChartDataPoint } from '../types/Bitcoin';
 import { formatPrice } from '../utils/format';
@@ -27,11 +27,14 @@ const powerLawPoint = (date: Date, actualPrice: number | null): ChartDataPoint =
   timestamp: date.getTime()
 });
 
-/** Price on the stress path for the calendar year of `timestamp`, or null outside retirement. */
+/** Stress-path price for the retirement year containing `timestamp`, or null outside retirement. */
 const planPriceFor = (timestamp: number, plan: RetirementPlan): number | null => {
-  const year = new Date(timestamp).getFullYear();
-  const offset = year - plan.retirementStartYear;
-  return offset >= 0 && offset < RETIREMENT_YEARS ? withdrawalPrice(year, offset) : null;
+  const date = new Date(timestamp);
+  const start = plan.retirementStart;
+  if (date.getTime() < start.getTime()) return null;
+  const months = (date.getFullYear() - start.getFullYear()) * 12 + (date.getMonth() - start.getMonth());
+  const offset = Math.floor(months / 12);
+  return offset < RETIREMENT_YEARS ? withdrawalPrice(retirementYearStart(start, offset), offset) : null;
 };
 
 const formatTooltipDate = (timestamp: number): string =>
@@ -75,10 +78,12 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
   // Default view projects 10 years; the full retirement is one click away (a 50-year
   // projection squeezes the price history into a sliver).
   const [showFullRetirement, setShowFullRetirement] = useState(false);
-  const lastPlanYear = plan ? plan.retirementStartYear + RETIREMENT_YEARS - 1 : 0;
+  const lastWithdrawal = plan ? retirementYearStart(plan.retirementStart, RETIREMENT_YEARS - 1) : null;
+  // The chart runs to the end of the last retirement year.
+  const planEnd = plan ? retirementYearStart(plan.retirementStart, RETIREMENT_YEARS).getTime() - 86400000 : 0;
   const lastHistoryYear = history.length > 0 ? new Date(history[history.length - 1].timestamp).getFullYear() : now.getFullYear();
-  const planExtendsBeyondDefault = lastPlanYear > lastHistoryYear + MIN_PROJECTION_YEARS;
-  const horizonPlanYear = showFullRetirement ? lastPlanYear : 0;
+  const planExtendsBeyondDefault = lastWithdrawal !== null && lastWithdrawal.getFullYear() > lastHistoryYear + MIN_PROJECTION_YEARS;
+  const horizonPlanEnd = showFullRetirement ? planEnd : 0;
 
   const chartData = useMemo(() => {
     const points = history.map(item => powerLawPoint(new Date(item.timestamp), item.price));
@@ -86,7 +91,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
       const lastTimestamp = history[history.length - 1].timestamp;
       const end = Math.max(
         new Date(lastTimestamp).setFullYear(new Date(lastTimestamp).getFullYear() + MIN_PROJECTION_YEARS),
-        new Date(horizonPlanYear, 11, 31).getTime()
+        horizonPlanEnd
       );
       for (let t = lastTimestamp + PROJECTION_STEP_DAYS * 86400000; t <= end; t += PROJECTION_STEP_DAYS * 86400000) {
         points.push(powerLawPoint(new Date(t), null));
@@ -94,7 +99,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
     }
     // Values below a cent break the log scale (very early dates).
     return points.filter(point => (point.actualPrice ?? point.powerLawPrice) >= 0.01);
-  }, [history, horizonPlanYear]);
+  }, [history, horizonPlanEnd]);
 
   const horizonEndYear = chartData.length > 0 ? new Date(chartData[chartData.length - 1].timestamp).getFullYear() : null;
 
@@ -150,7 +155,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
       {plan && planExtendsBeyondDefault && (
         <div className="horizon-toggle-row">
           <button type="button" className="horizon-toggle" onClick={() => setShowFullRetirement(value => !value)}>
-            {showFullRetirement ? 'Show next 10 years' : `Show full retirement (through ${lastPlanYear})`}
+            {showFullRetirement ? 'Show next 10 years' : `Show full retirement (through ${lastWithdrawal ? monthLabel(lastWithdrawal) : ''})`}
           </button>
         </div>
       )}

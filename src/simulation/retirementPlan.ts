@@ -1,4 +1,13 @@
-import { purchasePrice, retirementValuationPrice, withdrawalBasisLabel, withdrawalPrice, WithdrawalPath } from '../models/PricePath';
+import {
+  monthLabel,
+  purchasePrice,
+  retirementStartDate,
+  retirementValuationPrice,
+  retirementYearStart,
+  withdrawalBasisLabel,
+  withdrawalPrice,
+  WithdrawalPath
+} from '../models/PricePath';
 import { BitcoinPowerLaw } from '../models/PowerLaw';
 import { SmartWithdrawalStrategy } from '../utils/SmartWithdrawalStrategy';
 import { formatPrice } from '../utils/format';
@@ -9,7 +18,7 @@ export interface PlanInputs {
   bitcoinAmount: number;
   cashAmount: number;
   annualWithdrawal: number;
-  /** Retirement starts on January 1 of (current year + this many years). */
+  /** Retirement starts on the first of next month, plus this many years. */
   yearsUntilRetirement: number;
   monthlySavingsEnabled: boolean;
   monthlySavingsAmount: number;
@@ -18,7 +27,6 @@ export interface PlanInputs {
 export interface SavingsMonth {
   date: string;
   timestamp: number;
-  year: number;
   price: number;
   cashInvested: number;
   bitcoinPurchased: number;
@@ -27,9 +35,12 @@ export interface SavingsMonth {
 }
 
 export interface SimulationRow {
-  year: number;
+  /** Start of the 12-month period this row covers. */
+  timestamp: number;
+  /** "Nov 2026" for withdrawals, "Nov 2026 – Oct 2027" for savings years. */
+  periodLabel: string;
   phase: 'ACCUMULATION' | 'RETIREMENT START' | 'WITHDRAWAL';
-  /** Withdrawal price, or the average purchase price for accumulation years. */
+  /** Withdrawal price, or the average purchase price for savings years. */
   bitcoinPrice: number;
   fairValue: number;
   priceBasis: string;
@@ -56,7 +67,7 @@ export interface RetirementSimulation {
 }
 
 export interface RetirementPlan {
-  retirementStartYear: number;
+  retirementStart: Date;
   savings: SavingsMonth[];
   projectedBitcoin: number;
   totalCashInvested: number;
@@ -71,24 +82,25 @@ export interface RetirementPlan {
 export const hasPlanAssets = (inputs: PlanInputs): boolean =>
   inputs.bitcoinAmount > 0 || inputs.cashAmount > 0 || (inputs.monthlySavingsEnabled && inputs.monthlySavingsAmount > 0);
 
-/** Monthly purchases from the first of next month through December of the year before retirement. */
-export const projectSavings = (monthlyAmount: number, now: Date, retirementStartYear: number): SavingsMonth[] => {
+const isoDate = (date: Date): string =>
+  `${date.getFullYear()}-${`0${date.getMonth() + 1}`.slice(-2)}-${`0${date.getDate()}`.slice(-2)}`;
+
+/** Monthly purchases on the first of each month, from next month until retirement starts. */
+export const projectSavings = (monthlyAmount: number, now: Date, retirementStart: Date): SavingsMonth[] => {
   const months: SavingsMonth[] = [];
   if (monthlyAmount <= 0) return months;
 
   let totalBitcoinPurchased = 0;
   let totalCashInvested = 0;
-  const retirementStart = new Date(retirementStartYear, 0, 1).getTime();
-  for (let date = new Date(now.getFullYear(), now.getMonth() + 1, 1); date.getTime() < retirementStart;
+  for (let date = new Date(now.getFullYear(), now.getMonth() + 1, 1); date.getTime() < retirementStart.getTime();
     date = new Date(date.getFullYear(), date.getMonth() + 1, 1)) {
     const price = purchasePrice(date);
     const bitcoinPurchased = monthlyAmount / price;
     totalBitcoinPurchased += bitcoinPurchased;
     totalCashInvested += monthlyAmount;
     months.push({
-      date: `${date.getFullYear()}-${`0${date.getMonth() + 1}`.slice(-2)}-01`,
+      date: isoDate(date),
       timestamp: date.getTime(),
-      year: date.getFullYear(),
       price,
       cashInvested: monthlyAmount,
       bitcoinPurchased,
@@ -99,11 +111,12 @@ export const projectSavings = (monthlyAmount: number, now: Date, retirementStart
   return months;
 };
 
+/** One withdrawal at the start of each retirement year, priced on that date. */
 export const simulateRetirement = (params: {
   bitcoin: number;
   cash: number;
   annualWithdrawal: number;
-  startYear: number;
+  startDate: Date;
   path: WithdrawalPath;
 }): RetirementSimulation => {
   const rows: SimulationRow[] = [];
@@ -115,10 +128,9 @@ export const simulateRetirement = (params: {
   if (params.annualWithdrawal <= 0) return { rows, fullyFundedYears: 0, passes: false };
 
   for (let offset = 0; offset < RETIREMENT_YEARS; offset++) {
-    const year = params.startYear + offset;
-    const date = new Date(year, 0, 1);
+    const date = retirementYearStart(params.startDate, offset);
     const fairValue = BitcoinPowerLaw.calculateFairValue(date);
-    const bitcoinPrice = withdrawalPrice(year, offset, params.path);
+    const bitcoinPrice = withdrawalPrice(date, offset, params.path);
 
     const decision = SmartWithdrawalStrategy.calculateWithdrawal({
       currentBitcoinPrice: bitcoinPrice,
@@ -149,7 +161,8 @@ export const simulateRetirement = (params: {
 
     const remainingBitcoinValue = remainingBitcoin * bitcoinPrice;
     rows.push({
-      year,
+      timestamp: date.getTime(),
+      periodLabel: monthLabel(date),
       phase: offset === 0 ? 'RETIREMENT START' : 'WITHDRAWAL',
       bitcoinPrice,
       fairValue,
@@ -175,19 +188,23 @@ export const simulateRetirement = (params: {
   return { rows, fullyFundedYears, passes: fullyFundedYears >= RETIREMENT_YEARS };
 };
 
+/** Savings grouped into 12-month blocks that line up with the retirement years. */
 const accumulationRows = (savings: SavingsMonth[], startingBitcoin: number, cash: number): SimulationRow[] => {
-  const byYear = new Map<number, SavingsMonth[]>();
-  savings.forEach(month => byYear.set(month.year, [...(byYear.get(month.year) || []), month]));
-  return Array.from(byYear.entries()).map(([year, months]) => {
+  const rows: SimulationRow[] = [];
+  for (let i = 0; i < savings.length; i += 12) {
+    const months = savings.slice(i, i + 12);
+    const first = new Date(months[0].timestamp);
+    const last = new Date(months[months.length - 1].timestamp);
     const cashInvested = months.reduce((sum, m) => sum + m.cashInvested, 0);
     const bitcoinPurchased = months.reduce((sum, m) => sum + m.bitcoinPurchased, 0);
     const remainingBitcoin = startingBitcoin + months[months.length - 1].totalBitcoinPurchased;
     const averagePrice = cashInvested / bitcoinPurchased;
-    return {
-      year,
-      phase: 'ACCUMULATION' as const,
+    rows.push({
+      timestamp: first.getTime(),
+      periodLabel: `${monthLabel(first)} – ${monthLabel(last)}`,
+      phase: 'ACCUMULATION',
       bitcoinPrice: averagePrice,
-      fairValue: BitcoinPowerLaw.calculateFairValue(new Date(year, 0, 1)),
+      fairValue: BitcoinPowerLaw.calculateFairValue(first),
       priceBasis: 'Fair value (monthly buys)',
       annualWithdrawal: 0,
       fundedWithdrawal: 0,
@@ -201,14 +218,15 @@ const accumulationRows = (savings: SavingsMonth[], startingBitcoin: number, cash
       remainingBitcoin,
       remainingBitcoinValue: remainingBitcoin * averagePrice,
       totalRemainingValue: remainingBitcoin * averagePrice + cash
-    };
-  });
+    });
+  }
+  return rows;
 };
 
 export const buildRetirementPlan = (inputs: PlanInputs, now: Date, livePrice: number): RetirementPlan => {
-  const currentYear = now.getFullYear();
-  const retirementStartYear = currentYear + Math.max(0, Math.floor(inputs.yearsUntilRetirement));
-  const savings = inputs.monthlySavingsEnabled ? projectSavings(inputs.monthlySavingsAmount, now, retirementStartYear) : [];
+  const years = Math.max(0, Math.floor(inputs.yearsUntilRetirement));
+  const retirementStart = retirementStartDate(now, years);
+  const savings = inputs.monthlySavingsEnabled ? projectSavings(inputs.monthlySavingsAmount, now, retirementStart) : [];
   const last = savings[savings.length - 1];
   const projectedBitcoin = last ? last.totalBitcoinPurchased : 0;
   const bitcoinAtRetirement = inputs.bitcoinAmount + projectedBitcoin;
@@ -216,17 +234,17 @@ export const buildRetirementPlan = (inputs: PlanInputs, now: Date, livePrice: nu
     bitcoin: bitcoinAtRetirement,
     cash: inputs.cashAmount,
     annualWithdrawal: inputs.annualWithdrawal,
-    startYear: retirementStartYear,
+    startDate: retirementStart,
     path
   });
 
   return {
-    retirementStartYear,
+    retirementStart,
     savings,
     projectedBitcoin,
     totalCashInvested: last ? last.totalCashInvested : 0,
     bitcoinAtRetirement,
-    valuationPrice: retirementValuationPrice(retirementStartYear, currentYear, livePrice),
+    valuationPrice: retirementValuationPrice(retirementStart, years === 0, livePrice),
     accumulationRows: accumulationRows(savings, inputs.bitcoinAmount, inputs.cashAmount),
     stress: simulate('stress'),
     floorForever: simulate('floorForever')
@@ -234,8 +252,8 @@ export const buildRetirementPlan = (inputs: PlanInputs, now: Date, livePrice: nu
 };
 
 /**
- * What-if: the earliest year from `firstYear` through `lastYear` in which retiring with today's
- * BTC and cash (no future savings) would have passed the same 50-year test as the main verdict.
+ * What-if: the earliest year from `firstYear` through `lastYear` in which retiring on January 1
+ * with today's BTC and cash (no future savings) would have passed the same 50-year test.
  */
 export const firstPassingYear = (
   bitcoin: number,
@@ -246,7 +264,8 @@ export const firstPassingYear = (
 ): number | null => {
   if (annualWithdrawal <= 0 || (bitcoin <= 0 && cash <= 0)) return null;
   for (let year = firstYear; year <= lastYear; year++) {
-    if (simulateRetirement({ bitcoin, cash, annualWithdrawal, startYear: year, path: 'stress' }).passes) return year;
+    const result = simulateRetirement({ bitcoin, cash, annualWithdrawal, startDate: new Date(year, 0, 1), path: 'stress' });
+    if (result.passes) return year;
   }
   return null;
 };

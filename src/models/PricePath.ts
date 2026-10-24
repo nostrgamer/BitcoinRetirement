@@ -29,16 +29,27 @@ export const withdrawalBasisLabel = (offset: number, path: WithdrawalPath = 'str
   return 'Long-run (0.84×)';
 };
 
-/** Price used for the withdrawal in a given calendar year (withdrawals happen on January 1). */
-export const withdrawalPrice = (year: number, offset: number, path: WithdrawalPath = 'stress'): number =>
-  BitcoinPowerLaw.calculateFairValue(new Date(year, 0, 1)) * withdrawalRatio(offset, path);
+/** Price used for a withdrawal taken on `date` (the start of retirement year `offset`). */
+export const withdrawalPrice = (date: Date, offset: number, path: WithdrawalPath = 'stress'): number =>
+  BitcoinPowerLaw.calculateFairValue(date) * withdrawalRatio(offset, path);
 
 /** Monthly savings buy at that month's fair value. */
 export const purchasePrice = (date: Date): number => BitcoinPowerLaw.calculateFairValue(date);
 
 /**
- * Price used to value holdings at the start of retirement: the live price when retiring this
- * year, otherwise fair value on January 1 of the retirement year.
+ * Price used to value holdings at the start of retirement: the live price when retiring now
+ * (next month), otherwise fair value on the retirement start date.
  */
-export const retirementValuationPrice = (retirementStartYear: number, currentYear: number, livePrice: number): number =>
-  retirementStartYear <= currentYear ? livePrice : BitcoinPowerLaw.calculateFairValue(new Date(retirementStartYear, 0, 1));
+export const retirementValuationPrice = (retirementStart: Date, retiringNow: boolean, livePrice: number): number =>
+  retiringNow ? livePrice : BitcoinPowerLaw.calculateFairValue(retirementStart);
+
+/** Retirement starts on the first of next month, plus `yearsUntilRetirement` years. */
+export const retirementStartDate = (now: Date, yearsUntilRetirement: number): Date =>
+  new Date(now.getFullYear() + yearsUntilRetirement, now.getMonth() + 1, 1);
+
+/** Start of retirement year `offset` (anniversaries of the start date). */
+export const retirementYearStart = (start: Date, offset: number): Date =>
+  new Date(start.getFullYear() + offset, start.getMonth(), 1);
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+export const monthLabel = (date: Date): string => `${MONTHS[date.getMonth()]} ${date.getFullYear()}`;

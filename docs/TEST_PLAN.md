@@ -11,11 +11,12 @@ Everything runs locally with `./VERIFY.sh` (type check, unit tests, build, Playw
 |---|---|
 | Price path | Years 1–3 = 0.42×, year 4 = 0.855×, years 5–50 = 0.84× fair value; never above fair value |
 | Floor forever | 0.42× every year |
-| Reference fixture | $60k/yr from 2027, BTC only: stress path needs 2.90 BTC, floor forever 3.81 BTC |
+| Reference fixture | $60k/yr, BTC only: from 1 Jan 2027 the stress path needs 2.90 BTC and floor forever 3.81 BTC; from 1 Nov 2026 the stress path needs 3.04 BTC |
+| Start date | Retirement starts on the first of next month + N years (December rolls into January); retirement year k starts on the same day k years later |
 | Funded-year count | Consecutive fully funded withdrawals; a partly funded year doesn't count (BTC-only, cash-only, mixed, cash running out mid-year, first-year shortfall, all 50) |
 | Floor vs stress | Floor-forever never outlasts the stress path for the same inputs |
-| Savings dates | Monthly buys from next month through Dec of the year before retirement; priced at monthly fair value; projected BTC = sum of buys |
-| Valuation | Live price when retiring this year; fair value on Jan 1 of a later retirement year |
+| Savings dates | Monthly buys from next month until the month before retirement starts (12N purchases); priced at monthly fair value; projected BTC = sum of buys |
+| Valuation | Live price when retiring now; fair value on the retirement start date otherwise |
 | Cash-only | Gets a verdict |
 | Historical what-if | Earliest passing year with current holdings; every earlier year fails |
 

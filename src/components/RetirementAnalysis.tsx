@@ -1,4 +1,5 @@
 import React from 'react';
+import { monthLabel } from '../models/PricePath';
 import { RETIREMENT_YEARS, RetirementPlan } from '../simulation/retirementPlan';
 import { PlanInputs } from '../simulation/retirementPlan';
 import { SmartWithdrawalStrategy } from '../utils/SmartWithdrawalStrategy';
@@ -12,15 +13,13 @@ interface RetirementAnalysisProps {
 }
 
 const RetirementAnalysis: React.FC<RetirementAnalysisProps> = ({ inputs, plan, livePrice, historicalYear }) => {
-  const currentYear = new Date().getFullYear();
-  const yearsAway = plan.retirementStartYear - currentYear;
+  const yearsAway = inputs.yearsUntilRetirement;
+  const startLabel = monthLabel(plan.retirementStart);
   const { stress, floorForever } = plan;
   const firstShortfall = stress.rows.find(row => row.withdrawalShortfall > 0);
   const lastRow = stress.rows[stress.rows.length - 1];
   const totalAssets = plan.bitcoinAtRetirement * plan.valuationPrice + inputs.cashAmount;
-  const valuationLabel = yearsAway > 0
-    ? `fair value on Jan 1, ${plan.retirementStartYear}`
-    : 'current price';
+  const valuationLabel = yearsAway > 0 ? `fair value on 1 ${startLabel}` : 'current price';
 
   return (
     <>
@@ -32,7 +31,7 @@ const RetirementAnalysis: React.FC<RetirementAnalysisProps> = ({ inputs, plan, l
           </div>
           {firstShortfall && (
             <div className="shortfall-banner">
-              ⚠️ Withdrawal shortfall detected in {firstShortfall.year}: requested {formatPrice(firstShortfall.annualWithdrawal)},
+              ⚠️ Withdrawal shortfall detected in {firstShortfall.periodLabel}: requested {formatPrice(firstShortfall.annualWithdrawal)},
               funded {formatPrice(firstShortfall.fundedWithdrawal)}, shortfall {formatPrice(firstShortfall.withdrawalShortfall)}.
             </div>
           )}
@@ -79,7 +78,7 @@ const RetirementAnalysis: React.FC<RetirementAnalysisProps> = ({ inputs, plan, l
               </div>
             )}
             <div className="asset-item">
-              <span className="asset-label">Bitcoin at Retirement ({plan.retirementStartYear}):</span>
+              <span className="asset-label">Bitcoin at Retirement ({startLabel}):</span>
               <span className="asset-value" data-testid="bitcoin-at-retirement-value">
                 {formatBtc(plan.bitcoinAtRetirement, 4)}
                 <small> × {formatPrice(plan.valuationPrice)} ({valuationLabel}) = {formatPrice(plan.bitcoinAtRetirement * plan.valuationPrice)}</small>
@@ -109,10 +108,10 @@ const RetirementAnalysis: React.FC<RetirementAnalysisProps> = ({ inputs, plan, l
           {stress.passes ? (
             <div className="already-retired">
               <div className="celebration-message">
-                <h4>🎉 Congratulations! {yearsAway > 0 ? `You can retire in ${yearsAway} year${yearsAway === 1 ? '' : 's'}!` : 'You can retire today!'}</h4>
+                <h4>🎉 Congratulations! {yearsAway > 0 ? `You can retire in ${yearsAway} year${yearsAway === 1 ? '' : 's'}!` : 'You can retire now!'}</h4>
                 <p>
                   Your assets fund all {RETIREMENT_YEARS} years on the stress path (3 years at the floor, a recovery year,
-                  then 0.84× fair value){yearsAway > 0 ? `, starting ${plan.retirementStartYear}` : ''}.
+                  then 0.84× fair value), starting {startLabel}.
                 </p>
               </div>
             </div>
@@ -179,8 +178,8 @@ const RetirementAnalysis: React.FC<RetirementAnalysisProps> = ({ inputs, plan, l
           <p>
             <strong>
               {firstShortfall
-                ? `Withdrawal shortfall in ${firstShortfall.year}: requested ${formatPrice(firstShortfall.annualWithdrawal)}, funded ${formatPrice(firstShortfall.fundedWithdrawal)}.`
-                : `Assets are depleted in ${lastRow.year}.`}
+                ? `Withdrawal shortfall in ${firstShortfall.periodLabel}: requested ${formatPrice(firstShortfall.annualWithdrawal)}, funded ${formatPrice(firstShortfall.fundedWithdrawal)}.`
+                : `Assets are depleted after the ${lastRow.periodLabel} withdrawal.`}
             </strong>{' '}
             {stress.fullyFundedYears} of {RETIREMENT_YEARS} withdrawals are fully funded.
           </p>

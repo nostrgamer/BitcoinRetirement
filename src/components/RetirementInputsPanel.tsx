@@ -49,7 +49,7 @@ const RetirementInputsPanel: React.FC<RetirementInputsPanelProps> = ({ raw, setF
         title="Enter your annual spending in dollars. Bitcoin prices come from the Power Law curve."
         value={raw.annualWithdrawal} onChange={v => setField('annualWithdrawal', v)} />
       <NumberField id="yearsUntilRetirement" label="Years Until Retirement:" unit="years" step="1" placeholder="0 = retire now"
-        title="Retirement starts on January 1 of that year. Monthly savings (if enabled) run until then."
+        title="Retirement starts on the first of next month, plus this many years. Monthly savings (if enabled) run until then."
         value={raw.yearsUntilRetirement} onChange={v => setField('yearsUntilRetirement', v)} />
     </div>
 
@@ -111,7 +111,7 @@ const RetirementInputsPanel: React.FC<RetirementInputsPanelProps> = ({ raw, setF
             </div>
           )}
           {plan && plan.savings.length === 0 && (
-            <p className="savings-explanation">Retirement starts this year, so there are no months left to save.</p>
+            <p className="savings-explanation">Retirement starts next month, so there are no months left to save.</p>
           )}
         </>
       )}

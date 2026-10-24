@@ -41,12 +41,12 @@ Bands: **floor** = 0.42 × fair value, **upper bound** = 2 × fair value.
 | 4 | Recovery (0.855 × fair value, 75% of the way from floor to fair value) |
 | 5–50 | 0.84 × fair value (the median price-to-fair-value ratio over 2012–2024) |
 
-No retirement year is priced above fair value. Withdrawals happen once a year on January 1. Retirement starts on January 1 of (this year + years until retirement).
+No retirement year is priced above fair value. Retirement starts on the first of next month, plus the years until retirement (set 0 years on 24 October and retirement starts 1 November). Each retirement year has one withdrawal, taken on its first day and priced at that date's fair value times the ratio above.
 
 The first years matter most: on this path roughly 80% of all the Bitcoin a retiree ever sells goes in the first five years, when prices are lowest. That's why the path opens with three floor years.
 
 ### Savings
-Monthly savings buy Bitcoin at that month's fair value, from next month through December of the year before retirement.
+Monthly savings buy Bitcoin at that month's fair value, on the first of each month from next month until retirement starts: 12 purchases per year of saving.
 
 ### Scope
 - No taxes are modeled.

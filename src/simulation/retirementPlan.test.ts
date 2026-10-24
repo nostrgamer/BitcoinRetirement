@@ -3,21 +3,23 @@ import {
   FLOOR_RATIO,
   LONG_RUN_RATIO,
   RECOVERY_RATIO,
+  retirementStartDate,
   retirementValuationPrice,
+  retirementYearStart,
   withdrawalBasisLabel,
   withdrawalRatio
 } from '../models/PricePath';
 import { buildRetirementPlan, firstPassingYear, hasPlanAssets, projectSavings, simulateRetirement } from './retirementPlan';
 
-const fv = (year: number) => BitcoinPowerLaw.calculateFairValue(new Date(year, 0, 1));
+const fv = (date: Date) => BitcoinPowerLaw.calculateFairValue(date);
 
 /** Smallest BTC holding (no cash) that passes all 50 years, found by bisection. */
-const btcNeeded = (annualWithdrawal: number, startYear: number, path: 'stress' | 'floorForever') => {
+const btcNeeded = (annualWithdrawal: number, startDate: Date, path: 'stress' | 'floorForever') => {
   let lo = 0;
   let hi = 100;
   for (let i = 0; i < 60; i++) {
     const mid = (lo + hi) / 2;
-    if (simulateRetirement({ bitcoin: mid, cash: 0, annualWithdrawal, startYear, path }).passes) hi = mid;
+    if (simulateRetirement({ bitcoin: mid, cash: 0, annualWithdrawal, startDate, path }).passes) hi = mid;
     else lo = mid;
   }
   return hi;
@@ -55,19 +57,23 @@ describe('withdrawal price path', () => {
   });
 });
 
-describe('reference fixtures ($60k/yr for 50 years from 2027, BTC only)', () => {
-  it('stress path needs 2.90 BTC', () => {
-    expect(btcNeeded(60000, 2027, 'stress')).toBeCloseTo(2.898, 2);
+describe('reference fixtures ($60k/yr for 50 years, BTC only)', () => {
+  it('stress path from 1 Jan 2027 needs 2.90 BTC', () => {
+    expect(btcNeeded(60000, new Date(2027, 0, 1), 'stress')).toBeCloseTo(2.898, 2);
   });
 
-  it('floor-forever needs 3.81 BTC', () => {
-    expect(btcNeeded(60000, 2027, 'floorForever')).toBeCloseTo(3.805, 2);
+  it('floor-forever from 1 Jan 2027 needs 3.81 BTC', () => {
+    expect(btcNeeded(60000, new Date(2027, 0, 1), 'floorForever')).toBeCloseTo(3.805, 2);
+  });
+
+  it('stress path from 1 Nov 2026 needs 3.04 BTC', () => {
+    expect(btcNeeded(60000, new Date(2026, 10, 1), 'stress')).toBeCloseTo(3.037, 2);
   });
 });
 
 describe('simulateRetirement: fully funded year count', () => {
   const run = (bitcoin: number, cash: number, path: 'stress' | 'floorForever' = 'stress') =>
-    simulateRetirement({ bitcoin, cash, annualWithdrawal: 60000, startYear: 2027, path });
+    simulateRetirement({ bitcoin, cash, annualWithdrawal: 60000, startDate: new Date(2027, 0, 1), path });
 
   it('BTC only: counts years until the first shortfall', () => {
     const result = run(1, 0);
@@ -109,23 +115,31 @@ describe('simulateRetirement: fully funded year count', () => {
   });
 
   it('returns a failing result for a zero withdrawal', () => {
-    expect(simulateRetirement({ bitcoin: 1, cash: 0, annualWithdrawal: 0, startYear: 2027, path: 'stress' }).passes).toBe(false);
+    expect(simulateRetirement({ bitcoin: 1, cash: 0, annualWithdrawal: 0, startDate: new Date(2027, 0, 1), path: 'stress' }).passes).toBe(false);
   });
 });
 
 describe('savings projection date convention', () => {
   const now = new Date(2026, 9, 24); // 24 Oct 2026
 
-  it('buys monthly from next month through December of the year before retirement', () => {
-    const months = projectSavings(1000, now, 2036);
-    expect(months).toHaveLength(2 + 9 * 12); // Nov–Dec 2026, then 2027–2035
+  it('retirement starts on the first of next month, plus N years', () => {
+    expect(retirementStartDate(now, 0)).toEqual(new Date(2026, 10, 1));
+    expect(retirementStartDate(now, 10)).toEqual(new Date(2036, 10, 1));
+    expect(retirementStartDate(new Date(2026, 11, 15), 0)).toEqual(new Date(2027, 0, 1)); // December rolls over
+    expect(retirementYearStart(new Date(2026, 10, 1), 49)).toEqual(new Date(2075, 10, 1));
+  });
+
+  it('buys monthly from next month until the month before retirement: 12 purchases per year', () => {
+    const start = retirementStartDate(now, 10);
+    const months = projectSavings(1000, now, start);
+    expect(months).toHaveLength(120);
     expect(months[0].date).toBe('2026-11-01');
-    expect(months[months.length - 1].date).toBe('2035-12-01');
-    expect(months.every(m => m.timestamp < new Date(2036, 0, 1).getTime())).toBe(true);
+    expect(months[months.length - 1].date).toBe('2036-10-01');
+    expect(months.every(m => m.timestamp < start.getTime())).toBe(true);
   });
 
   it('prices every purchase at that month’s fair value', () => {
-    const months = projectSavings(1000, now, 2028);
+    const months = projectSavings(1000, now, retirementStartDate(now, 2));
     months.forEach(m => expect(m.price).toBeCloseTo(BitcoinPowerLaw.calculateFairValue(new Date(m.timestamp)), 6));
   });
 
@@ -137,22 +151,24 @@ describe('savings projection date convention', () => {
     const sum = plan.savings.reduce((total, m) => total + m.bitcoinPurchased, 0);
     expect(plan.projectedBitcoin).toBeCloseTo(sum, 12);
     expect(plan.bitcoinAtRetirement).toBeCloseTo(0.5 + sum, 12);
-    expect(plan.retirementStartYear).toBe(2036);
-    expect(plan.stress.rows[0].year).toBe(2036);
+    expect(plan.retirementStart).toEqual(new Date(2036, 10, 1));
+    expect(plan.stress.rows[0].periodLabel).toBe('Nov 2036');
+    expect(plan.accumulationRows).toHaveLength(10);
+    expect(plan.accumulationRows[9].periodLabel).toBe('Nov 2035 – Oct 2036');
   });
 
-  it('retiring this year means no purchases', () => {
-    expect(projectSavings(1000, now, 2026)).toHaveLength(0);
+  it('retiring now means no purchases', () => {
+    expect(projectSavings(1000, now, retirementStartDate(now, 0))).toHaveLength(0);
   });
 });
 
 describe('valuation price contexts', () => {
-  it('uses the live price when retiring this year', () => {
-    expect(retirementValuationPrice(2026, 2026, 83500)).toBe(83500);
+  it('uses the live price when retiring now', () => {
+    expect(retirementValuationPrice(new Date(2026, 10, 1), true, 83500)).toBe(83500);
   });
 
-  it('uses fair value on January 1 of a later retirement year', () => {
-    expect(retirementValuationPrice(2036, 2026, 83500)).toBeCloseTo(fv(2036), 6);
+  it('uses fair value on the retirement start date otherwise', () => {
+    expect(retirementValuationPrice(new Date(2036, 10, 1), false, 83500)).toBeCloseTo(fv(new Date(2036, 10, 1)), 6);
   });
 
   it('withdrawals use the stress path, not the live price', () => {
@@ -160,7 +176,7 @@ describe('valuation price contexts', () => {
       bitcoinAmount: 3, cashAmount: 0, annualWithdrawal: 60000,
       yearsUntilRetirement: 0, monthlySavingsEnabled: false, monthlySavingsAmount: 0
     }, new Date(2026, 9, 24), 83500);
-    expect(plan.stress.rows[0].bitcoinPrice).toBeCloseTo(fv(2026) * 0.42, 6);
+    expect(plan.stress.rows[0].bitcoinPrice).toBeCloseTo(fv(new Date(2026, 10, 1)) * 0.42, 6);
     expect(plan.valuationPrice).toBe(83500);
   });
 });
@@ -200,7 +216,7 @@ describe('plan assets', () => {
 describe('historical what-if', () => {
   it('returns the earliest passing year, and every earlier year fails', () => {
     const passes = (startYear: number) =>
-      simulateRetirement({ bitcoin: 5, cash: 0, annualWithdrawal: 60000, startYear, path: 'stress' }).passes;
+      simulateRetirement({ bitcoin: 5, cash: 0, annualWithdrawal: 60000, startDate: new Date(startYear, 0, 1), path: 'stress' }).passes;
     const year = firstPassingYear(5, 0, 60000, 2012, 2026);
     expect(year).not.toBeNull();
     for (let earlier = 2012; earlier < (year as number); earlier++) expect(passes(earlier)).toBe(false);

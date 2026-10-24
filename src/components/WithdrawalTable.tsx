@@ -23,7 +23,7 @@ const WithdrawalTable: React.FC<{ plan: RetirementPlan }> = ({ plan }) => {
 
       <div className="final-results-wrapper">
         <div className="final-results">
-          <h4>Final Results - {finalRow.year} ({withdrawalRows.length} year{withdrawalRows.length === 1 ? '' : 's'} of retirement)</h4>
+          <h4>Final Results - {finalRow.periodLabel} ({withdrawalRows.length} year{withdrawalRows.length === 1 ? '' : 's'} of retirement)</h4>
           <div className="final-results-grid">
             <div>
               <div className="final-label">Remaining Bitcoin</div>
@@ -46,7 +46,7 @@ const WithdrawalTable: React.FC<{ plan: RetirementPlan }> = ({ plan }) => {
         <table className="projection-table">
           <thead>
             <tr>
-              <th className="col-left">Year</th>
+              <th className="col-left">Date</th>
               <th>Phase</th>
               <th>Price Basis</th>
               <th className="col-right">BTC Price</th>
@@ -62,8 +62,8 @@ const WithdrawalTable: React.FC<{ plan: RetirementPlan }> = ({ plan }) => {
               const isAccumulation = row.phase === 'ACCUMULATION';
               const rowClass = isStart ? 'row-retirement-start' : index % 2 === 0 ? 'row-even' : 'row-odd';
               return (
-                <tr key={`${row.phase}-${row.year}`} className={rowClass} data-phase={row.phase}>
-                  <td className="cell-year">{row.year} {isStart ? '🏠' : ''}</td>
+                <tr key={`${row.phase}-${row.timestamp}`} className={rowClass} data-phase={row.phase}>
+                  <td className="cell-year">{row.periodLabel} {isStart ? '🏠' : ''}</td>
                   <td className={`cell-phase ${isAccumulation ? 'phase-save' : isStart ? 'phase-retire' : 'phase-spend'}`}>
                     {isAccumulation ? '💰 SAVE' : isStart ? '🏠 RETIRE' : '💸 SPEND'}
                   </td>
@@ -91,9 +91,9 @@ const WithdrawalTable: React.FC<{ plan: RetirementPlan }> = ({ plan }) => {
         <div className="table-guide-title"><strong>📋 Table Guide:</strong></div>
         <div className="table-guide-grid">
           <div>
-            <strong>💰 SAVE:</strong> monthly savings buy Bitcoin at the Power Law fair value; BTC Price shows that year's average purchase price.
+            <strong>💰 SAVE:</strong> monthly savings buy Bitcoin at the Power Law fair value; BTC Price shows the average purchase price for those 12 months.
             <br /><strong>🏠 RETIRE:</strong> first year of retirement (highlighted in purple).
-            <br /><strong>💸 SPEND:</strong> one withdrawal per year, on January 1.
+            <br /><strong>💸 SPEND:</strong> one withdrawal per retirement year, taken at its start.
           </div>
           <div>
             <strong>Stress path:</strong> 3 years at the floor (0.42× fair value), 1 recovery year (0.855×), then 0.84× fair value.
