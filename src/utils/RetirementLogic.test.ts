@@ -6,112 +6,13 @@
  */
 
 import { BitcoinPowerLaw } from '../models/PowerLaw';
+import { legacyBearMarketTest, legacyChartPlanPrice, legacyWithdrawalPhase } from '../simulation/legacyPlan';
 
-// Replicate the Bear Market Test logic from BitcoinChart (2 years at floor, then recovery, then 20-year runway)
-function bearMarketTest(
-  year: number,
-  bitcoinHoldings: number,
-  annualWithdrawal: number,
-  cashHoldings: number = 0
-): { passes: boolean; remainingBitcoin: number; remainingCash: number } {
-  if (bitcoinHoldings <= 0 || annualWithdrawal <= 0) return { passes: false, remainingBitcoin: 0, remainingCash: 0 };
-
-  let remainingBitcoin = bitcoinHoldings;
-  let remainingCash = Math.max(0, cashHoldings);
-  const targetDate = new Date(year, 0, 1);
-  const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
-  const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
-  const deepBearPrice = floorValue;
-
-  // Year 1 at floor
-  if (remainingCash >= annualWithdrawal) {
-    remainingCash -= annualWithdrawal;
-  } else {
-    const need = annualWithdrawal - remainingCash;
-    remainingCash = 0;
-    remainingBitcoin -= need / deepBearPrice;
-    if (remainingBitcoin < 0) return { passes: false, remainingBitcoin: 0, remainingCash: 0 };
-  }
-  // Year 2 at floor
-  if (remainingCash >= annualWithdrawal) {
-    remainingCash -= annualWithdrawal;
-  } else {
-    const need = annualWithdrawal - remainingCash;
-    remainingCash = 0;
-    remainingBitcoin -= need / deepBearPrice;
-    if (remainingBitcoin < 0) return { passes: false, remainingBitcoin: 0, remainingCash: 0 };
-  }
-  // Year 3 recovery
-  const bearRecoveryPrice = floorValue + (fairValue - floorValue) * 0.75;
-  if (remainingCash >= annualWithdrawal) {
-    remainingCash -= annualWithdrawal;
-  } else {
-    const need = annualWithdrawal - remainingCash;
-    remainingCash = 0;
-    remainingBitcoin -= need / bearRecoveryPrice;
-    if (remainingBitcoin < 0) return { passes: false, remainingBitcoin: 0, remainingCash: 0 };
-  }
-
-  const totalRemainingValue = remainingBitcoin * fairValue + remainingCash;
-  const yearsOfRunway = totalRemainingValue / annualWithdrawal;
-  const minimumYearsRequired = 20;
-
-  return {
-    passes: yearsOfRunway >= minimumYearsRequired,
-    remainingBitcoin,
-    remainingCash
-  };
-}
-
-// Replicate 50-year simulation price for withdrawal year index (0 = first year of retirement)
-function getWithdrawalPhasePrice(retirementStartYear: number, yearIndex: number): { price: number; phase: string } {
-  const targetDate = new Date(retirementStartYear + yearIndex, 0, 1);
-  const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
-  const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
-  const upperBound = BitcoinPowerLaw.calculateUpperBound(targetDate);
-
-  if (yearIndex === 0 || yearIndex === 1) {
-    return { price: floorValue, phase: yearIndex === 0 ? 'Retirement Start (Deep Bear — Year 1)' : 'Deep Bear (Floor) — Year 2' };
-  }
-  if (yearIndex === 2) {
-    const price = floorValue + (fairValue - floorValue) * 0.75;
-    return { price, phase: 'Bear Market Recovery' };
-  }
-  const cycleYear = (yearIndex - 3) % 4;
-  switch (cycleYear) {
-    case 0:
-      return { price: floorValue, phase: 'Deep Bear (Floor)' };
-    case 1:
-      return { price: floorValue + (fairValue - floorValue) * 0.75, phase: 'Bear Market Recovery' };
-    case 2:
-      return { price: fairValue + (upperBound - fairValue) * 0.7, phase: 'Bull Market' };
-    case 3:
-      return { price: fairValue + (upperBound - fairValue) * 0.3, phase: 'Bull Peak & Correction' };
-    default:
-      return { price: fairValue, phase: 'Fair Value' };
-  }
-}
-
-// Chart plan price: anchor year = chartRetirementStartYear, same sequence (0,1=floor; 2=recovery; 3+=cycle)
-function getChartPlanPriceForYear(year: number, chartRetirementStartYear: number): number | null {
-  if (year < chartRetirementStartYear) return null;
-  const targetDate = new Date(year, 0, 1);
-  const fairValue = BitcoinPowerLaw.calculateFairValue(targetDate);
-  const floorValue = BitcoinPowerLaw.calculateFloorPrice(targetDate);
-  const upperBound = BitcoinPowerLaw.calculateUpperBound(targetDate);
-  const offset = year - chartRetirementStartYear;
-
-  if (offset === 0 || offset === 1) return floorValue;
-  if (offset === 2) return floorValue + (fairValue - floorValue) * 0.75;
-  const cycleYear = (offset - 3) % 4;
-  switch (cycleYear) {
-    case 0: return floorValue;
-    case 1: return floorValue + (fairValue - floorValue) * 0.75;
-    case 2: return fairValue + (upperBound - fairValue) * 0.7;
-    case 3: return fairValue + (upperBound - fairValue) * 0.3;
-    default: return fairValue;
-  }
-}
+// These tests exercise the functions the UI imports (src/simulation/legacyPlan.ts), not local copies.
+const bearMarketTest = legacyBearMarketTest;
+const getWithdrawalPhasePrice = (retirementStartYear: number, yearIndex: number) =>
+  legacyWithdrawalPhase(retirementStartYear + yearIndex, yearIndex);
+const getChartPlanPriceForYear = legacyChartPlanPrice;
 
 describe('RetirementLogic (chart/table)', () => {
   const testYear = 2026;
