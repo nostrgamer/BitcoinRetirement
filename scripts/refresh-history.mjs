@@ -55,8 +55,12 @@ async function refreshCsv(rows) {
     price: Math.round(c.price * 100) / 100,
     timestamp: c.timestamp
   }));
-  for (let i = 1; i < newRows.length; i += 1) {
-    if (newRows[i].timestamp - newRows[i - 1].timestamp > 2 * DAY_MS) throw new Error(`Gap in Coinbase data near ${newRows[i].date}`);
+  // Every day from the existing last row through endMs must be present. Appending past a gap
+  // would advance the baseline and the gap would never be refilled.
+  for (let day = lastMs + DAY_MS, i = 0; day <= endMs; day += DAY_MS, i += 1) {
+    if (!newRows[i] || newRows[i].timestamp !== day) {
+      throw new Error(`Missing Coinbase daily close for ${new Date(day).toISOString().split('T')[0]}; nothing written`);
+    }
   }
   if (newRows.length > 0) {
     fs.appendFileSync(CSV_PATH, newRows.map(r => `\n${r.date},${r.price},${r.timestamp}`).join(''));

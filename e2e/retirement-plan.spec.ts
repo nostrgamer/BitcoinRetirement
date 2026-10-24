@@ -137,3 +137,15 @@ test('5-minute refresh keeps inputs, focus and scroll position', async ({ page }
   await expect(page.locator('#cashAmount')).toBeFocused();
   expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore);
 });
+
+test.describe('outside UTC', () => {
+  test.use({ timezoneId: 'America/Los_Angeles' });
+
+  test('retirement still starts on the first of next month in local time', async ({ page }) => {
+    await mockMarket(page);
+    await page.goto('/');
+    await setInputs(page, { bitcoin: '3.15', cash: '0', withdrawal: '60000', years: '0' });
+    await expect(withdrawalRows(page).first().locator('td').first()).toContainText('Nov 2026 – Oct 2027');
+    await expect(page.getByText(/starting Nov 2026/)).toBeVisible();
+  });
+});

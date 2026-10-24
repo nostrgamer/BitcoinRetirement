@@ -142,15 +142,17 @@ export class SmartWithdrawalStrategy {
 
     // If the preferred strategy did not fund the whole withdrawal, use any remaining
     // assets as a fallback. This preserves strategic preference while preventing the
-    // simulator from pretending an underfunded withdrawal was fully paid.
-    if (fundedWithdrawalAmount < requestedWithdrawal && requestedWithdrawal > 0) {
+    // simulator from pretending an underfunded withdrawal was fully paid. Gaps under a cent
+    // are floating-point dust (BTC amount x price), not a real shortfall.
+    const DUST = 0.01;
+    if (requestedWithdrawal - fundedWithdrawalAmount >= DUST) {
       const remainingCash = maxCash - useCashAmount;
       const extraCash = Math.min(remainingCash, requestedWithdrawal - fundedWithdrawalAmount);
       useCashAmount += extraCash;
       fundedWithdrawalAmount = this.calculateFundedAmount(useCashAmount, useBitcoinAmount, safePrice);
     }
 
-    if (fundedWithdrawalAmount < requestedWithdrawal && requestedWithdrawal > 0 && safePrice > 0) {
+    if (requestedWithdrawal - fundedWithdrawalAmount >= DUST && safePrice > 0) {
       const remainingBitcoin = maxBitcoin - useBitcoinAmount;
       const extraBitcoin = Math.min(remainingBitcoin, (requestedWithdrawal - fundedWithdrawalAmount) / safePrice);
       useBitcoinAmount += extraBitcoin;
@@ -159,7 +161,7 @@ export class SmartWithdrawalStrategy {
 
     // Avoid tiny floating-point dust being displayed as a shortfall.
     const withdrawalShortfall = Math.max(0, requestedWithdrawal - fundedWithdrawalAmount);
-    const normalizedShortfall = withdrawalShortfall < 0.01 ? 0 : withdrawalShortfall;
+    const normalizedShortfall = withdrawalShortfall < DUST ? 0 : withdrawalShortfall;
 
     return {
       ...decision,

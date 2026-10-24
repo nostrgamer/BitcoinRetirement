@@ -1,4 +1,4 @@
-import { fetchCoinbaseData, windowsNeeded } from '../../netlify/functions/lib/bitcoin-data';
+import { coversEveryDay, fetchCoinbaseData, windowsNeeded } from '../../netlify/functions/lib/bitcoin-data';
 import { createHandler } from '../../netlify/functions/bitcoin-data';
 
 const jsonResponse = (body: unknown, ok = true, status = 200) => ({
@@ -142,6 +142,59 @@ describe('History coverage after the bundled baseline', () => {
 
     expect(result.coverage.complete).toBe(false);
     expect(result.history.length).toBeGreaterThan(500);
+  });
+
+  it('a successful but sparse response is not complete coverage', async () => {
+    // Baseline ends 30 Sep; upstream returns only 23 Oct, so 1–22 Oct are missing.
+    const now = Date.parse('2026-10-24T12:00:00.000Z');
+    const result = await fetchCoinbaseData({
+      fetchImpl: (async (url: string) => url.endsWith('/ticker')
+        ? jsonResponse({ price: '80000', time: '2026-10-24T11:59:00.000Z' })
+        : jsonResponse([[Date.parse('2026-10-23T00:00:00.000Z') / 1000, 1, 1, 1, 80000, 1]])) as unknown as typeof fetch,
+      nowMs: now,
+      timeoutMs: 50,
+      baselineEndMs: Date.parse('2026-09-30T00:00:00.000Z')
+    });
+
+    expect(result.history).toHaveLength(1);
+    expect(result.coverage.complete).toBe(false);
+  });
+
+  it('requires every completed day after the baseline, but not today', () => {
+    const baselineEnd = Date.parse('2026-09-30T00:00:00.000Z');
+    const now = Date.parse('2026-10-03T12:00:00.000Z');
+    const days = (...dates: string[]) => new Map(dates.map(d => [Date.parse(`${d}T00:00:00.000Z`), true]));
+    expect(coversEveryDay(days('2026-10-01', '2026-10-02'), baselineEnd, now)).toBe(true);
+    expect(coversEveryDay(days('2026-10-02'), baselineEnd, now)).toBe(false); // boundary gap
+    expect(coversEveryDay(days('2026-10-01'), baselineEnd, now)).toBe(false); // trailing gap
+  });
+
+  it('slow windows stop at the shared deadline and return partial history', async () => {
+    // The newest window answers at once; older windows hang until aborted. The per-request
+    // timeout (1s) is far above the budget (100ms), so only the shared deadline can stop them.
+    let windowIndex = -1;
+    const fetchImpl = jest.fn((url: string, options: { signal: AbortSignal }) => {
+      if (url.endsWith('/ticker')) return Promise.resolve(jsonResponse({ price: '50000', time: '2026-08-15T11:59:00.000Z' }));
+      windowIndex += 1;
+      if (windowIndex === 0) return Promise.resolve(jsonResponse(dailyCandles(url)));
+      return new Promise((_resolve, reject) => {
+        options.signal.addEventListener('abort', () => reject(new Error('aborted')));
+      });
+    });
+
+    const startedAt = Date.now();
+    const result = await fetchCoinbaseData({
+      fetchImpl: fetchImpl as unknown as typeof fetch,
+      nowMs,
+      timeoutMs: 1000,
+      budgetMs: 100,
+      baselineEndMs: nowMs - 1100 * DAY_MS
+    });
+
+    expect(Date.now() - startedAt).toBeLessThan(500);
+    expect(result.coverage.complete).toBe(false);
+    expect(result.history.length).toBeGreaterThan(0);
+    expect(result.current).not.toBeNull();
   });
 
   it('needs at least one window even when the baseline is current', () => {

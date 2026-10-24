@@ -4,13 +4,13 @@ export const PINNED_NOW = new Date('2026-10-24T12:00:00Z');
 export const LIVE_PRICE = 83500;
 
 const GENESIS_MS = 1231006505000;
-/** Fair value on a local-time date, as the app computes it. */
+/** Fair value at a timestamp (browser runs in UTC, see playwright.config.ts). */
 export const fairValue = (date: Date) =>
   10 ** (-16.509 + 5.690 * Math.log10((date.getTime() - GENESIS_MS) / 86400000));
 
 /** With the clock pinned to 24 Oct 2026, retiring now starts 1 Nov 2026; `offset` counts retirement years. */
 export const retirementYear = (offset: number, yearsUntilRetirement = 0) =>
-  new Date(2026 + yearsUntilRetirement + offset, 10, 1);
+  new Date(Date.UTC(2026 + yearsUntilRetirement + offset, 10, 1));
 
 export const usd = (value: number) => `$${Math.round(value).toLocaleString('en-US')}`;
 
