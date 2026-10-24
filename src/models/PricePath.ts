@@ -26,7 +26,7 @@ export const withdrawalBasisLabel = (offset: number, path: WithdrawalPath = 'str
   if (path === 'floorForever') return 'Floor';
   if (offset < STRESS_FLOOR_YEARS) return `Floor (stress year ${offset + 1})`;
   if (offset === STRESS_FLOOR_YEARS) return 'Recovery';
-  return 'Long-run (0.84× fair value)';
+  return 'Long-run (0.84×)';
 };
 
 /** Price used for the withdrawal in a given calendar year (withdrawals happen on January 1). */

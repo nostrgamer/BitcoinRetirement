@@ -19,7 +19,7 @@ test.describe('retirement plan (stress path model)', () => {
       ['Floor (stress year 2)', 0.42],
       ['Floor (stress year 3)', 0.42],
       ['Recovery', 0.855],
-      ['Long-run (0.84× fair value)', 0.84]
+      ['Long-run (0.84×)', 0.84]
     ] as const;
     for (let i = 0; i < expected.length; i++) {
       const cells = rows.nth(i).locator('td');
@@ -61,12 +61,17 @@ test.describe('retirement plan (stress path model)', () => {
     await expect(page.getByTestId('bitcoin-at-retirement-value')).toContainText(`$${(2 * LIVE_PRICE / 1000).toFixed(0)}K`);
   });
 
-  test('chart projects through the last withdrawal year', async ({ page }) => {
+  test('chart shows 10 years by default and the full retirement on request', async ({ page }) => {
+    const horizon = async () => Number(await page.getByTestId('price-chart').getAttribute('data-horizon-end'));
+    await setInputs(page, { bitcoin: '3', cash: '0', withdrawal: '60000', years: '0' });
+    expect(await horizon()).toBeLessThanOrEqual(2037);
+    await page.getByRole('button', { name: /Show full retirement \(through 2075\)/ }).click();
     for (const years of [0, 10, 40, 50]) {
       await setInputs(page, { bitcoin: '3', cash: '0', withdrawal: '60000', years: String(years) });
-      const end = Number(await page.getByTestId('price-chart').getAttribute('data-horizon-end'));
-      expect(end).toBeGreaterThanOrEqual(2026 + years + 49);
+      expect(await horizon()).toBeGreaterThanOrEqual(2026 + years + 49);
     }
+    await page.getByRole('button', { name: 'Show next 10 years' }).click();
+    expect(await horizon()).toBeLessThanOrEqual(2037);
   });
 
   test('savings: one retirement-years input, no Double Down, purchases stop at retirement', async ({ page }) => {

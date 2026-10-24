@@ -1107,3 +1107,23 @@ main {
   grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 10px;
 }
+
+.horizon-toggle-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 0 8px;
+}
+
+.horizon-toggle {
+  background: rgba(156, 39, 176, 0.15);
+  color: #e1bee7;
+  border: 1px solid #9c27b0;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.9em;
+  cursor: pointer;
+}
+
+.horizon-toggle:hover {
+  background: rgba(156, 39, 176, 0.3);
+}

@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { BitcoinPowerLaw } from '../models/PowerLaw';
 import { withdrawalPrice } from '../models/PricePath';
@@ -72,8 +72,13 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
   const floorRatio = quote.price / floorValue;
   const upperBoundRatio = quote.price / upperBound;
 
-  // Project far enough to show the whole retirement on the plan line.
+  // Default view projects 10 years; the full retirement is one click away (a 50-year
+  // projection squeezes the price history into a sliver).
+  const [showFullRetirement, setShowFullRetirement] = useState(false);
   const lastPlanYear = plan ? plan.retirementStartYear + RETIREMENT_YEARS - 1 : 0;
+  const lastHistoryYear = history.length > 0 ? new Date(history[history.length - 1].timestamp).getFullYear() : now.getFullYear();
+  const planExtendsBeyondDefault = lastPlanYear > lastHistoryYear + MIN_PROJECTION_YEARS;
+  const horizonPlanYear = showFullRetirement ? lastPlanYear : 0;
 
   const chartData = useMemo(() => {
     const points = history.map(item => powerLawPoint(new Date(item.timestamp), item.price));
@@ -81,7 +86,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
       const lastTimestamp = history[history.length - 1].timestamp;
       const end = Math.max(
         new Date(lastTimestamp).setFullYear(new Date(lastTimestamp).getFullYear() + MIN_PROJECTION_YEARS),
-        new Date(lastPlanYear, 11, 31).getTime()
+        new Date(horizonPlanYear, 11, 31).getTime()
       );
       for (let t = lastTimestamp + PROJECTION_STEP_DAYS * 86400000; t <= end; t += PROJECTION_STEP_DAYS * 86400000) {
         points.push(powerLawPoint(new Date(t), null));
@@ -89,7 +94,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
     }
     // Values below a cent break the log scale (very early dates).
     return points.filter(point => (point.actualPrice ?? point.powerLawPrice) >= 0.01);
-  }, [history, lastPlanYear]);
+  }, [history, horizonPlanYear]);
 
   const horizonEndYear = chartData.length > 0 ? new Date(chartData[chartData.length - 1].timestamp).getFullYear() : null;
 
@@ -142,6 +147,13 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
         </div>
       </div>
 
+      {plan && planExtendsBeyondDefault && (
+        <div className="horizon-toggle-row">
+          <button type="button" className="horizon-toggle" onClick={() => setShowFullRetirement(value => !value)}>
+            {showFullRetirement ? 'Show next 10 years' : `Show full retirement (through ${lastPlanYear})`}
+          </button>
+        </div>
+      )}
       <div className="chart-wrapper" data-testid="price-chart" data-horizon-end={horizonEndYear ?? undefined}>
         <ResponsiveContainer width="100%" height={700}>
           <LineChart data={chartDataWithPlan} margin={{ top: 20, right: 30, left: 60, bottom: 40 }}>

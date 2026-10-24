@@ -50,7 +50,7 @@ describe('withdrawal price path', () => {
       'Floor (stress year 2)',
       'Floor (stress year 3)',
       'Recovery',
-      'Long-run (0.84× fair value)'
+      'Long-run (0.84×)'
     ]);
   });
 });
