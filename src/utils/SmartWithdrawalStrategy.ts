@@ -1,4 +1,10 @@
 import { BitcoinPowerLaw } from '../models/PowerLaw';
+import historicalStats from '../models/historicalStats.json';
+
+// Generated from the bundled price history by scripts/refresh-history.mjs.
+const LOW = `${historicalStats.minRatio.toFixed(2)}x (${historicalStats.minDate.slice(0, 4)})`;
+const HIGH = `${historicalStats.maxRatio.toFixed(2)}x (${historicalStats.maxDate.slice(0, 4)})`;
+const PERCENT_BELOW = `${historicalStats.percentBelowFairValue.toFixed(1)}%`;
 
 export interface WithdrawalDecision {
   /** Dollars of cash used for this withdrawal. Never greater than available cash. */
@@ -31,11 +37,8 @@ export interface WithdrawalContext {
 /**
  * Smart Withdrawal Strategy based on Power Law Fair Value Analysis
  *
- * Key insights from historical analysis:
- * - Bitcoin spends 54.4% of time below fair value (good time to preserve Bitcoin)
- * - Bitcoin spends 44.5% of time above fair value (good time to spend Bitcoin)
- * - Extreme ratios: 13.02x high, 0.42x low
- * - Mean reversion tendency over long periods
+ * Historical price / fair value figures (time below and above fair value, extreme highs and
+ * lows) live in src/models/historicalStats.json and are regenerated with the price history.
  */
 export class SmartWithdrawalStrategy {
 
@@ -96,7 +99,7 @@ export class SmartWithdrawalStrategy {
 
     // Strategy zones based on historical analysis
     if (fairValueRatio <= 0.5) {
-      // Extreme undervaluation (like 2015 crash to 0.42x)
+      // Extreme undervaluation (like the 2015 low)
       return this.extremeUndervaluedStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
 
     } else if (fairValueRatio <= 0.8) {
@@ -104,7 +107,7 @@ export class SmartWithdrawalStrategy {
       return this.undervaluedStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
 
     } else if (fairValueRatio <= 1.2) {
-      // Near fair value (±20% - historically 1.1% of time spent exactly at fair value)
+      // Near fair value (±20%)
       return this.fairValueStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
 
     } else if (fairValueRatio <= 2.5) {
@@ -116,7 +119,7 @@ export class SmartWithdrawalStrategy {
       return this.bubbleStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
 
     } else {
-      // Extreme bubble (like 2013's 13x fair value)
+      // Extreme bubble (like the 2013 high)
       return this.extremeBubbleStrategy(availableCash, availableBitcoin, withdrawalNeeded, fairValueRatio, currentPrice);
     }
   }
@@ -193,7 +196,7 @@ export class SmartWithdrawalStrategy {
         useCashAmount: withdrawalNeeded,
         useBitcoinAmount: 0,
         strategy: 'Cash Only (Extreme HODL)',
-        reasoning: `Bitcoin is extremely undervalued at ${fairValueRatio.toFixed(2)}x fair value. Historical low was 0.42x. Use all available cash to preserve Bitcoin for inevitable recovery.`,
+        reasoning: `Bitcoin is extremely undervalued at ${fairValueRatio.toFixed(2)}x fair value. Historical low was ${LOW}. Use all available cash to preserve Bitcoin for inevitable recovery.`,
         fairValueRatio,
         recommendedAction: 'HODL_BITCOIN'
       };
@@ -204,7 +207,7 @@ export class SmartWithdrawalStrategy {
         useCashAmount: availableCash,
         useBitcoinAmount: bitcoinNeeded,
         strategy: 'Cash First, Minimal Bitcoin',
-        reasoning: `Bitcoin extremely undervalued (${fairValueRatio.toFixed(2)}x). Using all ${availableCash.toLocaleString()} cash first, selling minimal Bitcoin.`,
+        reasoning: `Bitcoin extremely undervalued (${fairValueRatio.toFixed(2)}x). Using all $${availableCash.toLocaleString()} cash first, selling minimal Bitcoin.`,
         fairValueRatio,
         recommendedAction: 'HODL_BITCOIN'
       };
@@ -228,7 +231,7 @@ export class SmartWithdrawalStrategy {
         useCashAmount: preferredCashUsage,
         useBitcoinAmount: bitcoinNeeded,
         strategy: bitcoinNeeded > 0 ? 'Mostly Cash (80%+)' : 'Cash Only',
-        reasoning: `Bitcoin undervalued at ${fairValueRatio.toFixed(2)}x fair value. Historically spends 54.4% of time below 1.0x. Preserve Bitcoin for recovery.`,
+        reasoning: `Bitcoin undervalued at ${fairValueRatio.toFixed(2)}x fair value. Historically spends ${PERCENT_BELOW} of time below 1.0x. Preserve Bitcoin for recovery.`,
         fairValueRatio,
         recommendedAction: 'HODL_BITCOIN'
       };
@@ -337,14 +340,14 @@ export class SmartWithdrawalStrategy {
     fairValueRatio: number,
     currentPrice: number
   ): RawWithdrawalDecision {
-    // Extreme bubble like 2013's 13x - maximum profit taking
+    // Extreme bubble - maximum profit taking
     const bitcoinNeeded = withdrawalNeeded / currentPrice;
 
     return {
       useCashAmount: 0,
       useBitcoinAmount: Math.min(availableBitcoin, bitcoinNeeded),
       strategy: 'Bitcoin Only (Extreme Bubble)',
-      reasoning: `Bitcoin in extreme bubble at ${fairValueRatio.toFixed(2)}x fair value! Historical high was 13.02x in 2013. Take maximum profits immediately - major correction likely.`,
+      reasoning: `Bitcoin in extreme bubble at ${fairValueRatio.toFixed(2)}x fair value! Historical high was ${HIGH}. Take maximum profits immediately - major correction likely.`,
       fairValueRatio,
       recommendedAction: 'SPEND_BITCOIN'
     };
@@ -405,7 +408,7 @@ export class SmartWithdrawalStrategy {
     } else if (ratio <= 5.0) {
       return `🚨 BUBBLE TERRITORY: Bitcoin significantly overvalued at ${ratio.toFixed(2)}x. Strong profit-taking recommended. Current: ${bitcoinPercentage.toFixed(0)}% Bitcoin.`;
     } else {
-      return `🔴 EXTREME BUBBLE: Bitcoin at ${ratio.toFixed(2)}x fair value! Historical high was 13x. Aggressive profit-taking advised. Current: ${bitcoinPercentage.toFixed(0)}% Bitcoin.`;
+      return `🔴 EXTREME BUBBLE: Bitcoin at ${ratio.toFixed(2)}x fair value! Historical high was ${HIGH}. Aggressive profit-taking advised. Current: ${bitcoinPercentage.toFixed(0)}% Bitcoin.`;
     }
   }
 }

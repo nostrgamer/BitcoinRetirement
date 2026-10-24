@@ -7,3 +7,8 @@ export const formatPrice = (value: number): string => {
     return `$${value.toFixed(2)}`;
   }
 };
+
+/** Whole dollars with separators, e.g. $49,596. */
+export const formatUsd = (value: number): string => `$${Math.round(value).toLocaleString('en-US')}`;
+
+export const formatBtc = (value: number, decimals = 3): string => `${value.toFixed(decimals)} BTC`;
