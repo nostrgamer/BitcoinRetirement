@@ -9,9 +9,9 @@ Everything runs locally with `./VERIFY.sh` (type check, unit tests, build, Playw
 ## 2. Stress path and simulation — `src/simulation/retirementPlan.test.ts`
 | Check | Expectation |
 |---|---|
-| Price path | Years 1–3 = 0.42×, year 4 = 0.855×, years 5–50 = 0.84× fair value; never above fair value |
+| Price path | Years 1–3 = 0.42×, year 4 = 0.855×, years 5–50 = 0.76× fair value; never above fair value |
 | Floor forever | 0.42× every year |
-| Reference fixture | $60k/yr, BTC only: from 1 Jan 2027 the stress path needs 2.90 BTC and floor forever 3.81 BTC; from 1 Nov 2026 the stress path needs 3.04 BTC |
+| Reference fixture | $60k/yr, BTC only: from 1 Jan 2027 the stress path needs 2.97 BTC and floor forever 3.81 BTC; from 1 Nov 2026 the stress path needs 3.12 BTC |
 | Start date | Retirement starts on the first of next month + N years (December rolls into January); retirement year k starts on the same day k years later |
 | Funded-year count | Consecutive fully funded withdrawals; a partly funded year doesn't count (BTC-only, cash-only, mixed, cash running out mid-year, first-year shortfall, all 50) |
 | Floor vs stress | Floor-forever never outlasts the stress path for the same inputs |

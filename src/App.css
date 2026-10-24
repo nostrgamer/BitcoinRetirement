@@ -1041,6 +1041,7 @@ main {
 .projection-table .cell-year {
   text-align: left;
   font-weight: bold;
+  white-space: nowrap;
 }
 
 .row-retirement-start .cell-year {

@@ -23,7 +23,7 @@ const WithdrawalTable: React.FC<{ plan: RetirementPlan }> = ({ plan }) => {
 
       <div className="final-results-wrapper">
         <div className="final-results">
-          <h4>Final Results - {finalRow.periodLabel} ({withdrawalRows.length} year{withdrawalRows.length === 1 ? '' : 's'} of retirement)</h4>
+          <h4>Final Results after {withdrawalRows.length} year{withdrawalRows.length === 1 ? '' : 's'} of retirement ({finalRow.periodLabel})</h4>
           <div className="final-results-grid">
             <div>
               <div className="final-label">Remaining Bitcoin</div>
@@ -93,10 +93,10 @@ const WithdrawalTable: React.FC<{ plan: RetirementPlan }> = ({ plan }) => {
           <div>
             <strong>💰 SAVE:</strong> monthly savings buy Bitcoin at the Power Law fair value; BTC Price shows the average purchase price for those 12 months.
             <br /><strong>🏠 RETIRE:</strong> first year of retirement (highlighted in purple).
-            <br /><strong>💸 SPEND:</strong> one withdrawal per retirement year, taken at its start.
+            <br /><strong>💸 SPEND:</strong> one withdrawal on the first day of each 12-month period, covering that period's spending.
           </div>
           <div>
-            <strong>Stress path:</strong> 3 years at the floor (0.42× fair value), 1 recovery year (0.855×), then 0.84× fair value.
+            <strong>Stress path:</strong> 3 years at the floor (0.42× fair value), 1 recovery year (0.855×), then 0.76× fair value.
             <br /><strong>Strategy:</strong> spend cash when Bitcoin is cheap relative to fair value, sell Bitcoin when it isn't.
             <br /><strong>BTC Δ:</strong> + means buying Bitcoin, − means selling Bitcoin.
           </div>

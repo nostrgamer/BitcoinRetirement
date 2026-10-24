@@ -26,12 +26,12 @@ const btcNeeded = (annualWithdrawal: number, startDate: Date, path: 'stress' | '
 };
 
 describe('withdrawal price path', () => {
-  it('opens with 3 floor years, 1 recovery year, then 0.84x fair value', () => {
+  it('opens with 3 floor years, 1 recovery year, then 0.76x fair value', () => {
     expect([0, 1, 2, 3, 4, 5, 6].map(offset => withdrawalRatio(offset))).toEqual([
-      0.42, 0.42, 0.42, RECOVERY_RATIO, 0.84, 0.84, 0.84
+      0.42, 0.42, 0.42, RECOVERY_RATIO, 0.76, 0.76, 0.76
     ]);
     expect(RECOVERY_RATIO).toBeCloseTo(0.855, 10);
-    expect(LONG_RUN_RATIO).toBe(0.84);
+    expect(LONG_RUN_RATIO).toBe(0.76);
   });
 
   it('never prices a retirement year above fair value', () => {
@@ -52,22 +52,22 @@ describe('withdrawal price path', () => {
       'Floor (stress year 2)',
       'Floor (stress year 3)',
       'Recovery',
-      'Long-run (0.84×)'
+      'Long-run (0.76×)'
     ]);
   });
 });
 
 describe('reference fixtures ($60k/yr for 50 years, BTC only)', () => {
-  it('stress path from 1 Jan 2027 needs 2.90 BTC', () => {
-    expect(btcNeeded(60000, new Date(2027, 0, 1), 'stress')).toBeCloseTo(2.898, 2);
+  it('stress path from 1 Jan 2027 needs 2.97 BTC', () => {
+    expect(btcNeeded(60000, new Date(2027, 0, 1), 'stress')).toBeCloseTo(2.974, 2);
   });
 
   it('floor-forever from 1 Jan 2027 needs 3.81 BTC', () => {
     expect(btcNeeded(60000, new Date(2027, 0, 1), 'floorForever')).toBeCloseTo(3.805, 2);
   });
 
-  it('stress path from 1 Nov 2026 needs 3.04 BTC', () => {
-    expect(btcNeeded(60000, new Date(2026, 10, 1), 'stress')).toBeCloseTo(3.037, 2);
+  it('stress path from 1 Nov 2026 needs 3.12 BTC', () => {
+    expect(btcNeeded(60000, new Date(2026, 10, 1), 'stress')).toBeCloseTo(3.116, 2);
   });
 });
 
@@ -152,7 +152,7 @@ describe('savings projection date convention', () => {
     expect(plan.projectedBitcoin).toBeCloseTo(sum, 12);
     expect(plan.bitcoinAtRetirement).toBeCloseTo(0.5 + sum, 12);
     expect(plan.retirementStart).toEqual(new Date(2036, 10, 1));
-    expect(plan.stress.rows[0].periodLabel).toBe('Nov 2036');
+    expect(plan.stress.rows[0].periodLabel).toBe('Nov 2036 – Oct 2037');
     expect(plan.accumulationRows).toHaveLength(10);
     expect(plan.accumulationRows[9].periodLabel).toBe('Nov 2035 – Oct 2036');
   });

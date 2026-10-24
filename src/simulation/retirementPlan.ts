@@ -37,7 +37,7 @@ export interface SavingsMonth {
 export interface SimulationRow {
   /** Start of the 12-month period this row covers. */
   timestamp: number;
-  /** "Nov 2026" for withdrawals, "Nov 2026 – Oct 2027" for savings years. */
+  /** The 12 months the row covers, e.g. "Nov 2026 – Oct 2027": funded by a withdrawal, or saved into. */
   periodLabel: string;
   phase: 'ACCUMULATION' | 'RETIREMENT START' | 'WITHDRAWAL';
   /** Withdrawal price, or the average purchase price for savings years. */
@@ -162,7 +162,7 @@ export const simulateRetirement = (params: {
     const remainingBitcoinValue = remainingBitcoin * bitcoinPrice;
     rows.push({
       timestamp: date.getTime(),
-      periodLabel: monthLabel(date),
+      periodLabel: `${monthLabel(date)} – ${monthLabel(new Date(date.getFullYear() + 1, date.getMonth() - 1, 1))}`,
       phase: offset === 0 ? 'RETIREMENT START' : 'WITHDRAWAL',
       bitcoinPrice,
       fairValue,

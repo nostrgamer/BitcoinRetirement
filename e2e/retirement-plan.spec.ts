@@ -19,11 +19,11 @@ test.describe('retirement plan (stress path model)', () => {
       ['Floor (stress year 2)', 0.42],
       ['Floor (stress year 3)', 0.42],
       ['Recovery', 0.855],
-      ['Long-run (0.84×)', 0.84]
+      ['Long-run (0.76×)', 0.76]
     ] as const;
     for (let i = 0; i < expected.length; i++) {
       const cells = rows.nth(i).locator('td');
-      await expect(cells.nth(0)).toContainText(`Nov ${2026 + i}`);
+      await expect(cells.nth(0)).toContainText(`Nov ${2026 + i} – Oct ${2027 + i}`);
       await expect(cells.nth(1)).toHaveText(i === 0 ? '🏠 RETIRE' : '💸 SPEND');
       await expect(cells.nth(2)).toHaveText(expected[i][0]);
       await expect(cells.nth(3)).toHaveText(usd(fairValue(retirementYear(i)) * expected[i][1]));
@@ -31,15 +31,15 @@ test.describe('retirement plan (stress path model)', () => {
     await expect(page.locator('.projection-table')).not.toContainText(/Cycle|Bear|Bull/);
   });
 
-  test('3.1 BTC at $60k/yr retiring now (Nov 2026) passes; the floor-forever line shows a year count', async ({ page }) => {
-    await setInputs(page, { bitcoin: '3.1', cash: '0', withdrawal: '60000', years: '0' });
+  test('3.15 BTC at $60k/yr retiring now (Nov 2026) passes; the floor-forever line shows a year count', async ({ page }) => {
+    await setInputs(page, { bitcoin: '3.15', cash: '0', withdrawal: '60000', years: '0' });
     await expect(page.getByText(/starting Nov 2026/)).toBeVisible();
     await expect(page.getByText('✅ Ready to Retire!')).toBeVisible();
     await expect(page.getByTestId('floor-forever-years')).toHaveText(/^\d+ years?$/);
   });
 
-  test('3.0 BTC retiring now fails under the stress path (needs ~3.04)', async ({ page }) => {
-    await setInputs(page, { bitcoin: '3', cash: '0', withdrawal: '60000', years: '0' });
+  test('3.1 BTC retiring now fails under the stress path (needs ~3.12)', async ({ page }) => {
+    await setInputs(page, { bitcoin: '3.1', cash: '0', withdrawal: '60000', years: '0' });
     await expect(page.getByText(/50-Year Simulation: FAILED/)).toBeVisible();
   });
 
@@ -86,7 +86,7 @@ test.describe('retirement plan (stress path model)', () => {
     await expect(saveRows).toHaveCount(10);
     await expect(saveRows.first().locator('td').first()).toContainText('Nov 2026 – Oct 2027');
     await expect(saveRows.last().locator('td').first()).toContainText('Nov 2035 – Oct 2036');
-    await expect(withdrawalRows(page).first().locator('td').first()).toContainText('Nov 2036');
+    await expect(withdrawalRows(page).first().locator('td').first()).toContainText('Nov 2036 – Oct 2037');
   });
 
   test('historical what-if shows a year computed from current holdings only', async ({ page }) => {

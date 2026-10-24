@@ -31,7 +31,7 @@ const RetirementAnalysis: React.FC<RetirementAnalysisProps> = ({ inputs, plan, l
           </div>
           {firstShortfall && (
             <div className="shortfall-banner">
-              ⚠️ Withdrawal shortfall detected in {firstShortfall.periodLabel}: requested {formatPrice(firstShortfall.annualWithdrawal)},
+              ⚠️ Withdrawal shortfall detected for {firstShortfall.periodLabel}: requested {formatPrice(firstShortfall.annualWithdrawal)},
               funded {formatPrice(firstShortfall.fundedWithdrawal)}, shortfall {formatPrice(firstShortfall.withdrawalShortfall)}.
             </div>
           )}
@@ -111,7 +111,7 @@ const RetirementAnalysis: React.FC<RetirementAnalysisProps> = ({ inputs, plan, l
                 <h4>🎉 Congratulations! {yearsAway > 0 ? `You can retire in ${yearsAway} year${yearsAway === 1 ? '' : 's'}!` : 'You can retire now!'}</h4>
                 <p>
                   Your assets fund all {RETIREMENT_YEARS} years on the stress path (3 years at the floor, a recovery year,
-                  then 0.84× fair value), starting {startLabel}.
+                  then 0.76× fair value), starting {startLabel}.
                 </p>
               </div>
             </div>
@@ -178,8 +178,8 @@ const RetirementAnalysis: React.FC<RetirementAnalysisProps> = ({ inputs, plan, l
           <p>
             <strong>
               {firstShortfall
-                ? `Withdrawal shortfall in ${firstShortfall.periodLabel}: requested ${formatPrice(firstShortfall.annualWithdrawal)}, funded ${formatPrice(firstShortfall.fundedWithdrawal)}.`
-                : `Assets are depleted after the ${lastRow.periodLabel} withdrawal.`}
+                ? `Withdrawal shortfall for ${firstShortfall.periodLabel}: requested ${formatPrice(firstShortfall.annualWithdrawal)}, funded ${formatPrice(firstShortfall.fundedWithdrawal)}.`
+                : `Assets are depleted after the withdrawal for ${lastRow.periodLabel}.`}
             </strong>{' '}
             {stress.fullyFundedYears} of {RETIREMENT_YEARS} withdrawals are fully funded.
           </p>

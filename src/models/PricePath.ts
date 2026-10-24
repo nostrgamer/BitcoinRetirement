@@ -7,11 +7,11 @@ export const STRESS_FLOOR_YEARS = 3;
 /** Recovery year: 75% of the way from the floor back to fair value (0.855x). */
 export const RECOVERY_RATIO = FLOOR_RATIO + (1 - FLOOR_RATIO) * 0.75;
 /**
- * Every later year: 0.84x fair value, the median price / fair value ratio over 2012–2024
- * (owner decision 2026-10-24). Deliberately a fixed constant: refreshing the price history
+ * Every later year: 0.76x fair value, the median price / fair value ratio from 2012 through
+ * September 2026 (owner decision 2026-10-24, chosen over the 2012–2024 median of 0.84 as more conservative). Deliberately a fixed constant: refreshing the price history
  * must not silently change the model.
  */
-export const LONG_RUN_RATIO = 0.84;
+export const LONG_RUN_RATIO = 0.76;
 
 export type WithdrawalPath = 'stress' | 'floorForever';
 
@@ -26,7 +26,7 @@ export const withdrawalBasisLabel = (offset: number, path: WithdrawalPath = 'str
   if (path === 'floorForever') return 'Floor';
   if (offset < STRESS_FLOOR_YEARS) return `Floor (stress year ${offset + 1})`;
   if (offset === STRESS_FLOOR_YEARS) return 'Recovery';
-  return 'Long-run (0.84×)';
+  return 'Long-run (0.76×)';
 };
 
 /** Price used for a withdrawal taken on `date` (the start of retirement year `offset`). */
