@@ -165,6 +165,27 @@ describe('valuation price contexts', () => {
   });
 });
 
+describe('verdict does not depend on the market price at retirement', () => {
+  const inputs = {
+    bitcoinAmount: 2.95, cashAmount: 50000, annualWithdrawal: 60000,
+    yearsUntilRetirement: 0, monthlySavingsEnabled: false, monthlySavingsAmount: 0
+  };
+  const now = new Date(2026, 9, 24);
+  const fairToday = BitcoinPowerLaw.calculateFairValue(now);
+
+  it.each([
+    ['at the floor', 0.42],
+    ['at fair value', 1],
+    ['at a cycle top (2x)', 2],
+    ['in a 2013-style bubble (11x)', 11]
+  ])('same withdrawals and verdict when the live price is %s', (_label, ratio) => {
+    const baseline = buildRetirementPlan(inputs, now, fairToday * 0.42);
+    const plan = buildRetirementPlan(inputs, now, fairToday * ratio);
+    expect(plan.stress).toEqual(baseline.stress);
+    expect(plan.floorForever).toEqual(baseline.floorForever);
+  });
+});
+
 describe('plan assets', () => {
   it('cash-only portfolios get a verdict', () => {
     const inputs = {
