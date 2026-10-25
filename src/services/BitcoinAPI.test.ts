@@ -148,6 +148,34 @@ describe('baseline CSV and stale caches', () => {
     expect(result.historyComplete).toBe(false);
   });
 
+  it('a stalled refetch times out: loaded data is still returned, flagged incomplete', async () => {
+    jest.useFakeTimers();
+    try {
+      let csvCalls = 0;
+      globalThis.fetch = jest.fn((input: RequestInfo, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes('.csv')) {
+          csvCalls += 1;
+          if (csvCalls === 1) return Promise.resolve(response(STALE));
+          return new Promise((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+          });
+        }
+        return Promise.resolve(response(liveFromJan2026));
+      }) as jest.Mock;
+
+      const pending = BitcoinAPI.getMarketData();
+      for (let i = 0; i < 50 && csvCalls < 2; i++) await Promise.resolve();
+      expect(csvCalls).toBe(2);
+      jest.advanceTimersByTime(7000);
+      const result = await pending;
+      expect(result.historyComplete).toBe(false);
+      expect(result.quote.price).toBe(80000);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
   it('detects a gap only when live data starts more than a day after the CSV ends', () => {
     const base = BitcoinAPI.parseCSVData(FRESH);
     const at = (iso: string) => [{ date: iso, price: 1, timestamp: day(iso) }];

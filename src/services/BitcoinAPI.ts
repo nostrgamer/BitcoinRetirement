@@ -99,11 +99,21 @@ export class BitcoinAPI {
   }
 
   private static async loadBaseline(bypassCache = false): Promise<BitcoinPriceData[]> {
-    const response = await fetch(BASELINE_URL, bypassCache
-      ? { headers: { Accept: 'text/csv' }, cache: 'reload' }
-      : { headers: { Accept: 'text/csv' } });
-    if (!response.ok) throw new Error(`Bundled history returned HTTP ${response.status}`);
-    const baseline = this.parseCSVData(await response.text());
+    // The cache-bypassing refetch is a recovery step, so it is bounded (body included): a stall
+    // must not hold back data that already loaded.
+    const controller = bypassCache ? new AbortController() : null;
+    const timeout = controller ? setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS) : undefined;
+    let text: string;
+    try {
+      const response = await fetch(BASELINE_URL, controller
+        ? { headers: { Accept: 'text/csv' }, cache: 'reload', signal: controller.signal }
+        : { headers: { Accept: 'text/csv' } });
+      if (!response.ok) throw new Error(`Bundled history returned HTTP ${response.status}`);
+      text = await response.text();
+    } finally {
+      clearTimeout(timeout);
+    }
+    const baseline = this.parseCSVData(text);
     if (baseline.length === 0) throw new Error('Bundled history did not contain valid observations');
     return baseline;
   }
