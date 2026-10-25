@@ -138,6 +138,7 @@ describe('baseline CSV and stale caches', () => {
     expect(csvCalls).toHaveLength(2);
     expect(csvCalls[1].init).toMatchObject({ cache: 'reload' });
     expect(result.historyComplete).toBe(true);
+    expect(result.historyGapAfter).toBeNull();
     expect(result.history[0].timestamp).toBe(day('2026-09-29'));
   });
 
@@ -146,6 +147,7 @@ describe('baseline CSV and stale caches', () => {
     const result = await BitcoinAPI.getMarketData();
     expect(csvCalls).toHaveLength(2);
     expect(result.historyComplete).toBe(false);
+    expect(result.historyGapAfter).toBe(day('2024-12-31')); // the chart breaks here
   });
 
   it('a stalled refetch times out: loaded data is still returned, flagged incomplete', async () => {
@@ -171,6 +173,38 @@ describe('baseline CSV and stale caches', () => {
       const result = await pending;
       expect(result.historyComplete).toBe(false);
       expect(result.quote.price).toBe(80000);
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('a refetch whose body stalls also times out', async () => {
+    jest.useFakeTimers();
+    try {
+      let csvCalls = 0;
+      globalThis.fetch = jest.fn((input: RequestInfo, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes('.csv')) {
+          csvCalls += 1;
+          if (csvCalls === 1) return Promise.resolve(response(STALE));
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            text: () => new Promise((_resolve, reject) => {
+              init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+            })
+          } as unknown as Response);
+        }
+        return Promise.resolve(response(liveFromJan2026));
+      }) as jest.Mock;
+
+      const pending = BitcoinAPI.getMarketData();
+      for (let i = 0; i < 50 && csvCalls < 2; i++) await Promise.resolve();
+      for (let i = 0; i < 10; i++) await Promise.resolve();
+      jest.advanceTimersByTime(7000);
+      const result = await pending;
+      expect(result.historyComplete).toBe(false);
+      expect(result.historyGapAfter).toBe(day('2024-12-31'));
     } finally {
       jest.useRealTimers();
     }

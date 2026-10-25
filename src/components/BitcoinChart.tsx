@@ -40,6 +40,7 @@ const BitcoinChart: React.FC = () => {
         history={market.history}
         quote={market.quote}
         historyComplete={market.historyComplete}
+        historyGapAfter={market.historyGapAfter}
         refreshing={market.refreshing}
         plan={plan}
       />

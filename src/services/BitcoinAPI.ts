@@ -187,6 +187,7 @@ export class BitcoinAPI {
     // Without the function (local dev, outage) the bundled CSV is all we have; flag gaps the server
     // reports and any gap between the CSV and the live history.
     const historyComplete = joined && (remote?.coverage ? remote.coverage.complete === true : true);
-    return { history, quote, historyComplete };
+    const historyGapAfter = joined ? null : baseline[baseline.length - 1].timestamp;
+    return { history, quote, historyComplete, historyGapAfter };
   }
 }

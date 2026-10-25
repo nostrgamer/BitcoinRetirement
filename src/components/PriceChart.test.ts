@@ -14,4 +14,10 @@ describe('chart history points', () => {
     expect(points.map(p => p.actualPrice)).toEqual([50000, 50000, null, 50000, 50000]);
     expect(points[2]).toMatchObject({ missingHistory: true, date: '2025-01-01' });
   });
+
+  it('a known CSV / live discontinuity breaks the line even when only a day is missing', () => {
+    const history = obs('2026-09-29', '2026-09-30', '2026-10-02');
+    expect(historyPoints(history).map(p => p.actualPrice)).toEqual([50000, 50000, 50000]);
+    expect(historyPoints(history, day('2026-09-30')).map(p => p.actualPrice)).toEqual([50000, 50000, null, 50000]);
+  });
 });

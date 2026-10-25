@@ -36,6 +36,8 @@ export interface MarketDataResult {
   quote: BitcoinQuote;
   /** False when the server reported a gap between the bundled history and today. */
   historyComplete: boolean;
+  /** Timestamp of the last bundled observation when live history doesn't continue from it; the chart breaks there. */
+  historyGapAfter: number | null;
 }
 
 export interface ChartDataPoint {
