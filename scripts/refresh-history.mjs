@@ -18,7 +18,7 @@ const GENESIS_MS = 1231006505000;
 const fairValue = timestampMs =>
   10 ** (-16.509 + 5.690 * Math.log10(Math.max(1, (timestampMs - GENESIS_MS) / DAY_MS)));
 
-const readCsv = () => fs.readFileSync(CSV_PATH, 'utf8').trim().split(/\r?\n/).slice(1).map(line => {
+const readCsv = () => fs.readFileSync(CSV_PATH, 'utf8').trim().split(/\r?\n/).slice(1).filter(line => line.trim()).map(line => {
   const [date, price, timestamp] = line.split(',');
   return { date, price: Number(price), timestamp: Number(timestamp) };
 });
@@ -64,7 +64,9 @@ async function refreshCsv(rows) {
     }
   }
   if (newRows.length > 0) {
-    fs.appendFileSync(CSV_PATH, newRows.map(r => `\n${r.date},${r.price},${r.timestamp}`).join(''));
+    // Rewrite rather than append, so a trailing newline in the file can't leave a blank row.
+    const existing = fs.readFileSync(CSV_PATH, 'utf8').replace(/\s+$/, '');
+    fs.writeFileSync(CSV_PATH, existing + newRows.map(r => `\n${r.date},${r.price},${r.timestamp}`).join('') + '\n');
   }
   console.log(`Appended ${newRows.length} daily closes`);
 }
@@ -73,6 +75,9 @@ async function refreshCsv(rows) {
 // ratio = price / fair value at the row timestamp; below = strictly < 1, above = strictly > 1.
 function computeStats(rows) {
   const ratios = rows.map(r => ({ ratio: r.price / fairValue(r.timestamp), date: r.date }));
+  // A NaN ratio (malformed row) silently scrambles the sort below, so refuse it.
+  const bad = ratios.find(r => !Number.isFinite(r.ratio));
+  if (bad) throw new Error(`Malformed CSV row near ${bad.date || '(blank)'}`);
   const min = ratios.reduce((a, b) => (b.ratio < a.ratio ? b : a));
   const max = ratios.reduce((a, b) => (b.ratio > a.ratio ? b : a));
   const sorted = ratios.map(r => r.ratio).sort((a, b) => a - b);

@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { BitcoinPowerLaw } from './PowerLaw';
+import { LONG_RUN_RATIO } from './PricePath';
 import historicalStats from './historicalStats.json';
 
 // Recomputes src/models/historicalStats.json from the bundled CSV so displayed figures cannot go stale.
@@ -20,6 +21,14 @@ describe('historicalStats.json matches the bundled price history', () => {
   it('csvVersion is the content hash of the CSV (it versions the CSV URL)', () => {
     const raw = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'bitcoin-historical-data.csv'));
     expect(historicalStats.csvVersion).toBe(crypto.createHash('sha256').update(raw).digest('hex').slice(0, 12));
+  });
+
+  it('every CSV row is a valid observation (a blank or malformed row corrupts the median)', () => {
+    expect(rows.every(r => /^\d{4}-\d{2}-\d{2}$/.test(r.date) && Number.isFinite(r.ratio) && r.ratio > 0)).toBe(true);
+  });
+
+  it('the long-run withdrawal ratio stays below the historical median (conservative)', () => {
+    expect(LONG_RUN_RATIO).toBeLessThan(historicalStats.medianRatio);
   });
 
   it('covers every row through the last CSV date', () => {

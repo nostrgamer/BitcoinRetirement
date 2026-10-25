@@ -39,7 +39,7 @@ Bands: **floor** = 0.42 × fair value, **upper bound** = 2 × fair value.
 |---|---|
 | 1–3 | Floor (0.42 × fair value) |
 | 4 | Recovery (0.855 × fair value, 75% of the way from floor to fair value) |
-| 5–50 | 0.76 × fair value (the median price-to-fair-value ratio from 2012 through September 2026) |
+| 5–50 | 0.76 × fair value (about 10% below the historical median price-to-fair-value ratio of 0.84, 2012 through September 2026) |
 
 No retirement year is priced above fair value. Retirement starts on the first of next month, plus the years until retirement (set 0 years on 24 October and retirement starts 1 November). Each retirement year has one withdrawal, taken on its first day to cover the next 12 months and priced at that date's fair value times the ratio above.
 
