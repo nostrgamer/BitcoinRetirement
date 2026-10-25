@@ -7,8 +7,8 @@ export const STRESS_FLOOR_YEARS = 3;
 /** Recovery year: 75% of the way from the floor back to fair value (0.855x). */
 export const RECOVERY_RATIO = FLOOR_RATIO + (1 - FLOOR_RATIO) * 0.75;
 /**
- * Every later year: 0.76x fair value, the median price / fair value ratio from 2012 through
- * September 2026 (owner decision 2026-10-24, chosen over the 2012–2024 median of 0.84 as more conservative). Deliberately a fixed constant: refreshing the price history
+ * Every later year: 0.76x fair value, a conservative choice about 10% below the historical median
+ * price / fair value ratio (0.84, 2012 through September 2026; owner decision 2026-10-25). Deliberately a fixed constant: refreshing the price history
  * must not silently change the model.
  */
 export const LONG_RUN_RATIO = 0.76;

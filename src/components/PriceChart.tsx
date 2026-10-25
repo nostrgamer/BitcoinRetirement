@@ -9,11 +9,15 @@ import MarketDataStatus from './MarketDataStatus';
 
 const MIN_PROJECTION_YEARS = 10;
 const PROJECTION_STEP_DAYS = 30;
+/** Consecutive observations further apart than this are a gap, not just sparse data. */
+const GAP_BREAK_DAYS = 10;
+const DAY_MS = 86400000;
 
 interface PriceChartProps {
   history: BitcoinPriceData[];
   quote: BitcoinQuote;
   historyComplete: boolean;
+  historyGapAfter?: number | null;
   refreshing: boolean;
   plan: RetirementPlan | null;
 }
@@ -26,6 +30,23 @@ const powerLawPoint = (date: Date, actualPrice: number | null): ChartDataPoint =
   powerLawUpperBound: BitcoinPowerLaw.calculateUpperBound(date),
   timestamp: date.getTime()
 });
+
+/**
+ * Chart points for the price history, with a null-price break wherever history is missing: after
+ * `gapAfter` (a known CSV / live-data discontinuity) and across any stretch over GAP_BREAK_DAYS.
+ */
+export const historyPoints = (history: BitcoinPriceData[], gapAfter: number | null = null): ChartDataPoint[] => {
+  const points: ChartDataPoint[] = [];
+  history.forEach((item, index) => {
+    const previous = history[index - 1];
+    const knownGap = previous !== undefined && previous.timestamp === gapAfter;
+    if (previous && (knownGap || item.timestamp - previous.timestamp > GAP_BREAK_DAYS * DAY_MS)) {
+      points.push({ ...powerLawPoint(new Date(previous.timestamp + DAY_MS), null), missingHistory: true });
+    }
+    points.push(powerLawPoint(new Date(item.timestamp), item.price));
+  });
+  return points;
+};
 
 /** Stress-path price for the retirement year containing `timestamp`, or null outside retirement. */
 const planPriceFor = (timestamp: number, plan: RetirementPlan): number | null => {
@@ -61,12 +82,14 @@ const CustomTooltip = ({ active, payload, label }: any) => {
           <p className="tooltip-ratio">{`Upper Bound Ratio (2x): ${(actual / (fair * 2)).toFixed(2)}x`}</p>
         </>
       )}
-      {actual === null && <p className="tooltip-future">📈 Future Projection</p>}
+      {actual === null && (payload[0]?.payload?.missingHistory
+        ? <p className="tooltip-future">No price data for this period</p>
+        : <p className="tooltip-future">📈 Future Projection</p>)}
     </div>
   );
 };
 
-const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete, refreshing, plan }) => {
+const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete, historyGapAfter = null, refreshing, plan }) => {
   const now = new Date();
   const fairValue = BitcoinPowerLaw.calculateFairValue(now);
   const floorValue = BitcoinPowerLaw.calculateFloorPrice(now);
@@ -86,7 +109,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
   const horizonPlanEnd = showFullRetirement ? planEnd : 0;
 
   const chartData = useMemo(() => {
-    const points = history.map(item => powerLawPoint(new Date(item.timestamp), item.price));
+    const points = historyPoints(history, historyGapAfter);
     if (history.length > 0) {
       const lastTimestamp = history[history.length - 1].timestamp;
       const end = Math.max(
@@ -99,7 +122,7 @@ const PriceChart: React.FC<PriceChartProps> = ({ history, quote, historyComplete
     }
     // Values below a cent break the log scale (very early dates).
     return points.filter(point => (point.actualPrice ?? point.powerLawPrice) >= 0.01);
-  }, [history, horizonPlanEnd]);
+  }, [history, historyGapAfter, horizonPlanEnd]);
 
   const horizonEndYear = chartData.length > 0 ? new Date(chartData[chartData.length - 1].timestamp).getFullYear() : null;
 

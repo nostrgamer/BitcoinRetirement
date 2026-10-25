@@ -1,11 +1,12 @@
 {
   "through": "2026-09-30",
-  "observations": 5388,
+  "observations": 5387,
   "minRatio": 0.38,
   "minDate": "2015-09-21",
   "maxRatio": 11.25,
   "maxDate": "2013-12-04",
-  "medianRatio": 0.76,
-  "percentBelowFairValue": 57.4,
-  "percentAboveFairValue": 42.5
+  "medianRatio": 0.84,
+  "percentBelowFairValue": 57.5,
+  "percentAboveFairValue": 42.5,
+  "csvVersion": "cfcc0057c97a"
 }

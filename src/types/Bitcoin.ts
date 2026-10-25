@@ -36,6 +36,8 @@ export interface MarketDataResult {
   quote: BitcoinQuote;
   /** False when the server reported a gap between the bundled history and today. */
   historyComplete: boolean;
+  /** Timestamp of the last bundled observation when live history doesn't continue from it; the chart breaks there. */
+  historyGapAfter: number | null;
 }
 
 export interface ChartDataPoint {
@@ -47,4 +49,6 @@ export interface ChartDataPoint {
   timestamp: number;
   /** Price on the retirement stress path for this point's calendar year (when retirement inputs are valid) */
   withdrawalPlanPrice?: number | null;
+  /** Break marker inserted where price history is missing, so the line isn't drawn across the gap */
+  missingHistory?: boolean;
 }

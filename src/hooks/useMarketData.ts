@@ -8,6 +8,7 @@ export interface MarketData {
   history: BitcoinPriceData[];
   quote: BitcoinQuote | null;
   historyComplete: boolean;
+  historyGapAfter: number | null;
   /** True only until the first load finishes; refreshes never blank the page. */
   initialLoading: boolean;
   /** True while a background refresh is in flight. */
@@ -20,6 +21,7 @@ export const useMarketData = (): MarketData => {
   const [history, setHistory] = useState<BitcoinPriceData[]>([]);
   const [quote, setQuote] = useState<BitcoinQuote | null>(null);
   const [historyComplete, setHistoryComplete] = useState(true);
+  const [historyGapAfter, setHistoryGapAfter] = useState<number | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,6 +33,7 @@ export const useMarketData = (): MarketData => {
       setHistory(data.history);
       setQuote(data.quote);
       setHistoryComplete(data.historyComplete);
+      setHistoryGapAfter(data.historyGapAfter);
       setError(null);
     } catch (err) {
       console.error('Error loading chart data:', err);
@@ -48,5 +51,5 @@ export const useMarketData = (): MarketData => {
     return () => clearInterval(interval);
   }, [load]);
 
-  return { history, quote, historyComplete, initialLoading, refreshing, error, reload: load };
+  return { history, quote, historyComplete, historyGapAfter, initialLoading, refreshing, error, reload: load };
 };
