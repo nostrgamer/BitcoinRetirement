@@ -1,4 +1,4 @@
-import { BASELINE_URL, BitcoinAPI, mergeHistoricalData } from './BitcoinAPI';
+import { BASELINE_URL, BitcoinAPI, hasHistoryGap, mergeHistoricalData } from './BitcoinAPI';
 import historicalStats from '../models/historicalStats.json';
 
 const csv = `date,price,timestamp
@@ -93,9 +93,67 @@ describe('BitcoinAPI same-origin market data', () => {
   });
 });
 
-describe('baseline CSV URL', () => {
-  it('is versioned by the last date in the bundled history, so a refresh bypasses cached copies', () => {
-    expect(BASELINE_URL).toBe(`/bitcoin-historical-data.csv?v=${historicalStats.through}`);
-    expect(historicalStats.through).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+describe('baseline CSV and stale caches', () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = originalFetch; });
+
+  const DAY = 86400000;
+  const day = (iso: string) => Date.parse(`${iso}T00:00:00.000Z`);
+  const csvThrough = (...dates: string[]) =>
+    ['date,price,timestamp', ...dates.map(d => `${d},50000,${day(d)}`)].join('\n');
+  const STALE = csvThrough('2024-12-30', '2024-12-31'); // the pre-refresh CSV
+  const FRESH = csvThrough('2026-09-29', '2026-09-30');
+  // Newer function: complete by its own baseline, history from Jan 2026.
+  const liveFromJan2026 = {
+    current: { price: 80000, observedAt: Date.now(), source: 'Coinbase Exchange BTC-USD', status: 'live' },
+    history: [day('2026-01-09'), day('2026-09-30'), day('2026-10-01')].map(t => ({ date: '', price: 80000, timestamp: t })),
+    servedAt: Date.now(),
+    status: 'live',
+    coverage: { from: '2026-01-09', to: '2026-10-01', complete: true }
+  };
+  const mockFetch = (csvBodies: string[]) => {
+    const csvCalls: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = jest.fn(async (input, init) => {
+      const url = String(input);
+      if (url.includes('.csv')) {
+        csvCalls.push({ url, init });
+        return response(csvBodies[Math.min(csvCalls.length - 1, csvBodies.length - 1)]);
+      }
+      return response(liveFromJan2026);
+    }) as jest.Mock;
+    return csvCalls;
+  };
+
+  it('requests the CSV at a URL versioned by its content hash', async () => {
+    const csvCalls = mockFetch([FRESH]);
+    await BitcoinAPI.getMarketData();
+    expect(csvCalls).toHaveLength(1);
+    expect(csvCalls[0].url).toBe(`/bitcoin-historical-data.csv?v=${historicalStats.csvVersion}`);
+    expect(BASELINE_URL).toBe(csvCalls[0].url);
+  });
+
+  it('a stale cached CSV is refetched bypassing the cache, and the history joins up', async () => {
+    const csvCalls = mockFetch([STALE, FRESH]);
+    const result = await BitcoinAPI.getMarketData();
+    expect(csvCalls).toHaveLength(2);
+    expect(csvCalls[1].init).toMatchObject({ cache: 'reload' });
+    expect(result.historyComplete).toBe(true);
+    expect(result.history[0].timestamp).toBe(day('2026-09-29'));
+  });
+
+  it('if the refetch is still stale, history is reported incomplete despite the server saying complete', async () => {
+    const csvCalls = mockFetch([STALE, STALE]);
+    const result = await BitcoinAPI.getMarketData();
+    expect(csvCalls).toHaveLength(2);
+    expect(result.historyComplete).toBe(false);
+  });
+
+  it('detects a gap only when live data starts more than a day after the CSV ends', () => {
+    const base = BitcoinAPI.parseCSVData(FRESH);
+    const at = (iso: string) => [{ date: iso, price: 1, timestamp: day(iso) }];
+    expect(hasHistoryGap(base, at('2026-10-01'))).toBe(false);
+    expect(hasHistoryGap(base, at('2026-10-02'))).toBe(true);
+    expect(hasHistoryGap(base, [])).toBe(false); // no live data: nothing to join
+    expect(day('2026-10-02') - day('2026-09-30')).toBe(2 * DAY);
   });
 });

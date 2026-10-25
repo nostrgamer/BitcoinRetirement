@@ -7,9 +7,10 @@ import {
 } from '../types/Bitcoin';
 import historicalStats from '../models/historicalStats.json';
 
-// The CSV is cached for a day; versioning the URL by its last date (regenerated with the CSV by
-// scripts/refresh-history.mjs) stops a browser pairing an old cached CSV with newer live data.
-export const BASELINE_URL = `/bitcoin-historical-data.csv?v=${historicalStats.through}`;
+// The CSV is cached for a day; versioning the URL by its content hash (regenerated with the CSV by
+// scripts/refresh-history.mjs) makes a new deploy fetch the new file instead of a cached copy.
+export const BASELINE_URL = `/bitcoin-historical-data.csv?v=${historicalStats.csvVersion}`;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const MARKET_DATA_URL = '/api/bitcoin-data';
 const REQUEST_TIMEOUT_MS = 7000;
 const LIVE_QUOTE_MAX_AGE_MS = 15 * 60 * 1000;
@@ -50,6 +51,18 @@ export const mergeHistoricalData = (
   return Array.from(byTimestamp.values()).sort((a, b) => a.timestamp - b.timestamp);
 };
 
+/**
+ * True when live history exists but doesn't continue from the CSV's last day, e.g. a tab left
+ * open across a deploy pairing its old cached CSV with the newer function's history.
+ */
+export const hasHistoryGap = (baseline: BitcoinPriceData[], recent: BitcoinPriceData[]): boolean => {
+  if (baseline.length === 0) return false;
+  const baselineEnd = baseline[baseline.length - 1].timestamp;
+  const after = recent.filter(item => item.timestamp > baselineEnd).map(item => item.timestamp);
+  if (after.length === 0) return false;
+  return Math.min(...after) - baselineEnd > 1.5 * DAY_MS;
+};
+
 const fetchWithTimeout = async (url: string): Promise<Response> => {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -85,8 +98,10 @@ export class BitcoinAPI {
     return mergeHistoricalData(data, []);
   }
 
-  private static async loadBaseline(): Promise<BitcoinPriceData[]> {
-    const response = await fetch(BASELINE_URL, { headers: { Accept: 'text/csv' } });
+  private static async loadBaseline(bypassCache = false): Promise<BitcoinPriceData[]> {
+    const response = await fetch(BASELINE_URL, bypassCache
+      ? { headers: { Accept: 'text/csv' }, cache: 'reload' }
+      : { headers: { Accept: 'text/csv' } });
     if (!response.ok) throw new Error(`Bundled history returned HTTP ${response.status}`);
     const baseline = this.parseCSVData(await response.text());
     if (baseline.length === 0) throw new Error('Bundled history did not contain valid observations');
@@ -102,7 +117,7 @@ export class BitcoinAPI {
   }
 
   static async getMarketData(): Promise<MarketDataResult> {
-    const baseline = await this.loadBaseline();
+    let baseline = await this.loadBaseline();
     let remote: SameOriginMarketDataResponse | null = null;
 
     try {
@@ -115,6 +130,16 @@ export class BitcoinAPI {
     const recent = Array.isArray(remoteHistory)
       ? remoteHistory.map(normalizeObservation).filter((item): item is BitcoinPriceData => item !== null)
       : [];
+    // If live data doesn't join up with the CSV, the CSV is probably a stale cached copy: refetch it once.
+    let joined = !hasHistoryGap(baseline, recent);
+    if (!joined) {
+      try {
+        baseline = await this.loadBaseline(true);
+        joined = !hasHistoryGap(baseline, recent);
+      } catch {
+        // Keep the CSV we have; the gap is reported below.
+      }
+    }
     const history = mergeHistoricalData(baseline, recent);
     const latestHistory = history[history.length - 1];
     const remoteQuote = remote?.current;
@@ -149,8 +174,9 @@ export class BitcoinAPI {
       };
     }
 
-    // Without the function (local dev, outage) the bundled CSV is all we have; only flag gaps the server reports.
-    const historyComplete = remote?.coverage ? remote.coverage.complete === true : true;
+    // Without the function (local dev, outage) the bundled CSV is all we have; flag gaps the server
+    // reports and any gap between the CSV and the live history.
+    const historyComplete = joined && (remote?.coverage ? remote.coverage.complete === true : true);
     return { history, quote, historyComplete };
   }
 }

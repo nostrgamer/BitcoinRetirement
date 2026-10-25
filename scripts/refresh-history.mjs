@@ -2,6 +2,7 @@
 // Refresh the bundled price history from Coinbase daily closes, then regenerate the
 // baseline constant used by the Netlify function and the historical stats shown in the UI.
 // Run locally (roughly yearly): node scripts/refresh-history.mjs [--stats-only]
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -105,6 +106,8 @@ module.exports = {
   BASELINE_END_MS: ${last.timestamp}
 };
 `);
-const stats = computeStats(rows);
+// Content hash of the CSV; the client puts it in the CSV URL so any change bypasses browser caches.
+const csvVersion = crypto.createHash('sha256').update(fs.readFileSync(CSV_PATH)).digest('hex').slice(0, 12);
+const stats = { ...computeStats(rows), csvVersion };
 fs.writeFileSync(STATS_PATH, JSON.stringify(stats, null, 2) + '\n');
 console.log(stats);

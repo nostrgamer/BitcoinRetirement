@@ -1,4 +1,5 @@
 /// <reference types="node" />
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { BitcoinPowerLaw } from './PowerLaw';
@@ -15,6 +16,11 @@ describe('historicalStats.json matches the bundled price history', () => {
   });
   const round2 = (value: number) => Math.round(value * 100) / 100;
   const pct = (count: number) => Math.round((count / rows.length) * 1000) / 10;
+
+  it('csvVersion is the content hash of the CSV (it versions the CSV URL)', () => {
+    const raw = fs.readFileSync(path.join(__dirname, '..', '..', 'public', 'bitcoin-historical-data.csv'));
+    expect(historicalStats.csvVersion).toBe(crypto.createHash('sha256').update(raw).digest('hex').slice(0, 12));
+  });
 
   it('covers every row through the last CSV date', () => {
     expect(historicalStats.observations).toBe(rows.length);
