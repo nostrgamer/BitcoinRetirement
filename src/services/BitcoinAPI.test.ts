@@ -1,4 +1,5 @@
-import { BitcoinAPI, mergeHistoricalData } from './BitcoinAPI';
+import { BASELINE_URL, BitcoinAPI, mergeHistoricalData } from './BitcoinAPI';
+import historicalStats from '../models/historicalStats.json';
 
 const csv = `date,price,timestamp
 2024-12-30,92000,1735516800000
@@ -43,7 +44,7 @@ describe('BitcoinAPI same-origin market data', () => {
     const observedAt = Date.now() - 60_000;
     globalThis.fetch = jest.fn(async input => {
       const url = String(input);
-      if (url.endsWith('.csv')) return response(csv);
+      if (url.includes('.csv')) return response(csv);
       return response({
         current: { price: 101000, observedAt, source: 'Coinbase Exchange BTC-USD', status: 'live' },
         history: [{ date: '2025-01-01', price: 94000, timestamp: 1735689600000 }],
@@ -61,7 +62,7 @@ describe('BitcoinAPI same-origin market data', () => {
 
   it('keeps the calculator usable with an explicit baseline fallback on function failure', async () => {
     globalThis.fetch = jest.fn(async input => {
-      if (String(input).endsWith('.csv')) return response(csv);
+      if (String(input).includes('.csv')) return response(csv);
       throw new Error('function unavailable');
     }) as jest.Mock;
 
@@ -78,7 +79,7 @@ describe('BitcoinAPI same-origin market data', () => {
 
   it('rejects malformed function observations and labels the baseline fallback', async () => {
     globalThis.fetch = jest.fn(async input => {
-      if (String(input).endsWith('.csv')) return response(csv);
+      if (String(input).includes('.csv')) return response(csv);
       return response({
         current: { price: 'not-a-price', observedAt: 'now', source: '', status: 'live' },
         history: [{ price: -10, timestamp: 1735689600000 }]
@@ -89,5 +90,12 @@ describe('BitcoinAPI same-origin market data', () => {
     expect(result.history).toHaveLength(2);
     expect(result.quote.status).toBe('fallback');
     expect(result.quote.source).toBe('Bundled historical CSV');
+  });
+});
+
+describe('baseline CSV URL', () => {
+  it('is versioned by the last date in the bundled history, so a refresh bypasses cached copies', () => {
+    expect(BASELINE_URL).toBe(`/bitcoin-historical-data.csv?v=${historicalStats.through}`);
+    expect(historicalStats.through).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });

@@ -5,8 +5,11 @@ import {
   MarketDataStatus,
   SameOriginMarketDataResponse
 } from '../types/Bitcoin';
+import historicalStats from '../models/historicalStats.json';
 
-const BASELINE_URL = '/bitcoin-historical-data.csv';
+// The CSV is cached for a day; versioning the URL by its last date (regenerated with the CSV by
+// scripts/refresh-history.mjs) stops a browser pairing an old cached CSV with newer live data.
+export const BASELINE_URL = `/bitcoin-historical-data.csv?v=${historicalStats.through}`;
 const MARKET_DATA_URL = '/api/bitcoin-data';
 const REQUEST_TIMEOUT_MS = 7000;
 const LIVE_QUOTE_MAX_AGE_MS = 15 * 60 * 1000;

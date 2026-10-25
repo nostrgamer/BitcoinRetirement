@@ -29,7 +29,7 @@ export async function mockMarket(page: Page, { installClock = false } = {}) {
   const calls = { api: 0 };
   if (installClock) await page.clock.install({ time: PINNED_NOW });
   else await page.clock.setFixedTime(PINNED_NOW);
-  await page.route('**/bitcoin-historical-data.csv', route =>
+  await page.route(/\/bitcoin-historical-data\.csv(\?|$)/, route =>
     route.fulfill({ status: 200, contentType: 'text/csv', body: fixedCsv() }));
   await page.route('**/api/bitcoin-data', route => {
     calls.api += 1;
